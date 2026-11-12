@@ -1534,19 +1534,18 @@ async function printViaBluetooth() {
   var ctx = canvas.getContext('2d');
   renderLabelCanvas(ctx, PW, PH);
 
-  // Converter pixels do canvas para linhas 1-bit
-  // TRANSPOSTA: B1 lê colunas do canvas como linhas da impressora
+  // Converter pixels do canvas para linhas 1-bit (48 bytes = 384px por linha)
   var imgData = ctx.getImageData(0, 0, PW, PH);
   var px = imgData.data;
-  var BYTES = Math.ceil(PH / 8); // 230px / 8 = 29 bytes por linha
+  var BYTES = 48; // 384/8
   var rows = [];
-  for (var col = 0; col < PW; col++) { // 384 "linhas" enviadas para a impressora
+  for (var row = 0; row < PH; row++) {
     var rb = new Uint8Array(BYTES);
-    for (var row = 0; row < PH; row++) {
+    for (var col = 0; col < PW; col++) {
       var pi = (row * PW + col) * 4;
       var gray = 0.299 * px[pi] + 0.587 * px[pi+1] + 0.114 * px[pi+2];
-      if (gray < 128) { // pixel preto
-        rb[Math.floor(row / 8)] |= (1 << (7 - (row % 8)));
+      if (gray < 180) {
+        rb[Math.floor(col / 8)] |= (1 << (7 - (col % 8)));
       }
     }
     rows.push(rb);
@@ -1688,16 +1687,15 @@ async function printViaBluetooth() {
     await sleep(50);
 
     // 6. SetPageSize 6b (0x13): [rows_hi, rows_lo, cols_hi, cols_lo, copies_hi, copies_lo]
-    // Com transposição: rows = PW (384), cols = PH (230)
-    var ph = PW;
+    var ph = PH;
     await sendWait(0x13, [
-      (ph>>8)&0xFF, ph&0xFF,         // 384 linhas = 0x01 0x80
-      (PH>>8)&0xFF, PH&0xFF,         // 230 colunas = 0x00 0xE6
+      (ph>>8)&0xFF, ph&0xFF,
+      0x01, 0x80, // cols = 384 = 0x180
       0x00, 0x01
     ]);
     await sleep(50);
 
-    setStatus('🖨️ Imprimindo ' + rows.length + ' linhas...');
+    setStatus('🖨️ Imprimindo ' + PH + ' linhas...');
 
     // 7. Enviar linhas bitmap
     for (var r=0; r<rows.length; r++) {
