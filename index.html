@@ -845,6 +845,29 @@ function updateLabel() {
   updateQR(osNum, equip, serie);
 }
 
+// Atualiza apenas os textos da etiqueta SEM recriar o canvas do QR code.
+// Usado na impressão Bluetooth para preservar o canvas já renderizado.
+function updateLabelTextOnly() {
+  var osNum  = document.getElementById('f-os') ? document.getElementById('f-os').value.trim() : '';
+  var equip  = document.getElementById('eq1-modelo') ? document.getElementById('eq1-modelo').value.trim() : '';
+  var serie  = document.getElementById('eq1-serie') ? document.getElementById('eq1-serie').value.trim() : '';
+
+  document.getElementById('lbl-os-num').textContent = osNum || '——';
+  document.getElementById('hdr-os').textContent = osNum || '——';
+
+  var today = new Date();
+  var d = String(today.getDate()).padStart(2,'0');
+  var m = String(today.getMonth()+1).padStart(2,'0');
+  var y = today.getFullYear();
+  document.getElementById('lbl-date').textContent = 'Entrada: ' + d + '/' + m + '/' + y;
+
+  var equipText = equip;
+  if (serie) equipText += ' · ' + serie;
+  document.getElementById('lbl-equip').textContent = equipText;
+  // Propositalmente NÃO chama updateQR() — o canvas do QR já foi renderizado
+  // pelos handlers onChange e deve ser preservado intacto para a impressão.
+}
+
 function updateQR() {
   // Coleta todos os dados do formulário
   var g = function(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
@@ -1517,15 +1540,14 @@ function downloadLabelPng() {
 // Protocolo: pacote [0x55 0x55 CMD LEN DATA... CHECKSUM 0xAA 0xAA]
 // Connect prefixado com 0x03. Checksum = XOR(CMD, LEN, DATA...)
 async function printViaBluetooth() {
-  // Garante que os campos da etiqueta estejam atualizados com os dados do formulário
-  updateLabel();
+  // Atualiza textos da etiqueta SEM recriar o QR canvas (já renderizado pelos onChange)
+  // updateLabel() chamaria updateQR() que destroi/recria o canvas, causando etiqueta branca
+  updateLabelTextOnly();
 
   if (!navigator.bluetooth) {
     alert('Web Bluetooth não disponível.\nUse Google Chrome (desktop ou Android).\nNão funciona em Safari, Firefox ou Edge Mobile.');
     return;
   }
-
-  updateLabel();
 
   var PW = 384;
   var PH = labelSizeMm === 30 ? 230 : 307;
