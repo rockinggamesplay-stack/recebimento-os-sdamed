@@ -1540,9 +1540,11 @@ function downloadLabelPng() {
 // Protocolo: pacote [0x55 0x55 CMD LEN DATA... CHECKSUM 0xAA 0xAA]
 // Connect prefixado com 0x03. Checksum = XOR(CMD, LEN, DATA...)
 async function printViaBluetooth() {
-  // Atualiza textos da etiqueta SEM recriar o QR canvas (já renderizado pelos onChange)
-  // updateLabel() chamaria updateQR() que destroi/recria o canvas, causando etiqueta branca
-  updateLabelTextOnly();
+  // Atualiza etiqueta incluindo QR (igual ao downloadLabelPng que funciona)
+  // updateLabelTextOnly() causava etiqueta em branco porque o canvas QR pode estar inválido
+  updateLabel();
+  // Aguarda qrcodejs finalizar criação do canvas (img.onload é assíncrono)
+  await new Promise(function(r) { setTimeout(r, 150); });
 
   if (!navigator.bluetooth) {
     alert('Web Bluetooth não disponível.\nUse Google Chrome (desktop ou Android).\nNão funciona em Safari, Firefox ou Edge Mobile.');
@@ -1572,6 +1574,15 @@ async function printViaBluetooth() {
     }
     rows.push(rb);
   }
+
+  // Diagnóstico: conta linhas com dados (para debug de bitmap vazio)
+  var nonBlankRows = 0;
+  for (var ri = 0; ri < rows.length; ri++) {
+    for (var bi2 = 0; bi2 < rows[ri].length; bi2++) {
+      if (rows[ri][bi2] !== 0) { nonBlankRows++; break; }
+    }
+  }
+  console.log('[BT Print] Bitmap: ' + nonBlankRows + '/' + PH + ' linhas com dados');
 
   var statusEl = document.getElementById('bt-print-status');
   function setStatus(msg, isError) {
@@ -1661,6 +1672,11 @@ async function printViaBluetooth() {
   function sleep(ms) { return new Promise(function(r){setTimeout(r,ms);}); }
 
   function sendRaw(bytes) {
+    // Prefere write-with-response (confirmado) se disponível — mais confiável para dados de bitmap
+    // Fallback para writeValueWithoutResponse se a característica não suportar write
+    if (channel.properties && channel.properties.write) {
+      return channel.writeValue(bytes.buffer);
+    }
     return channel.writeValueWithoutResponse(bytes.buffer);
   }
 
@@ -1739,7 +1755,7 @@ async function printViaBluetooth() {
         payload.set(rb, 6);
         await sendRaw(mkPkt(0x85, payload));
       }
-      await sleep(5);
+      await sleep(10);
     }
 
     // 8. PageEnd (0xE3) — aguarda até 20s enquanto impressora avança o papel
