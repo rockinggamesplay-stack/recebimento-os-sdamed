@@ -1,0 +1,1765 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#111111">
+<title>Recebimento OS — SDAMed</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style id="niimbot-size">@page{size:50mm 30mm;margin:0}</style>
+<style>
+/* ══ PALETA SDAMed ══ */
+:root {
+  --red:    #CC0000;
+  --red-dk: #990000;
+  --red-lt: #FFF0F0;
+  --black:  #111111;
+  --gray1:  #F5F5F5;
+  --gray2:  #E0E0E0;
+  --muted:  #757575;
+  --white:  #FFFFFF;
+  --green:  #2E7D32;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--gray1);
+  color: var(--black);
+  min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ── Header ── */
+.header {
+  background: var(--black);
+  color: var(--white);
+  padding: 14px 16px;
+  text-align: center;
+  position: sticky; top: 0; z-index: 50;
+  box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  border-bottom: 3px solid var(--red);
+}
+.header-title { font-size: 13px; opacity: .7; letter-spacing: .6px; text-transform: uppercase; }
+.header-os    { font-size: 26px; font-weight: 900; letter-spacing: 2px; margin-top: 2px; color: var(--white); }
+.header-os span { color: var(--red); }
+
+/* ── Tabs ── */
+.tabs {
+  display: flex; background: var(--white);
+  border-bottom: 1px solid var(--gray2);
+  position: sticky; top: 71px; z-index: 40;
+  overflow-x: auto;
+}
+.tab {
+  flex: 1; padding: 12px 4px; text-align: center;
+  font-size: 12px; font-weight: 500; color: var(--muted);
+  cursor: pointer; border-bottom: 3px solid transparent;
+  white-space: nowrap; min-width: 70px;
+  transition: color .15s;
+}
+.tab.active { color: var(--red); border-bottom-color: var(--red); }
+.tab-icon { display: block; font-size: 16px; margin-bottom: 2px; }
+
+/* ── Tab Content ── */
+.tab-panel { display: none; padding: 20px 16px 32px; max-width: 640px; margin: 0 auto; }
+.tab-panel.active { display: block; }
+
+/* ── Section header ── */
+.section-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  color: var(--red); text-transform: uppercase;
+  border-left: 3px solid var(--red); padding-left: 8px;
+  margin-bottom: 14px; margin-top: 20px;
+}
+.section-title:first-child { margin-top: 0; }
+
+/* ── Form fields ── */
+.field { margin-bottom: 14px; }
+.field label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--muted); margin-bottom: 5px;
+}
+.field label .req { color: var(--red); }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 12px 14px;
+  border: 1.5px solid var(--gray2);
+  border-radius: 10px;
+  font-size: 15px; color: var(--black);
+  background: var(--white);
+  outline: none; transition: border-color .15s;
+  -webkit-appearance: none;
+}
+.field input::placeholder, .field textarea::placeholder { color: var(--gray2); }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--red); }
+.field textarea { min-height: 80px; resize: vertical; }
+.field select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23757575' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+
+/* ── Equipment card ── */
+.equip-card {
+  border: 1.5px solid var(--gray2);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.equip-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--red-lt);
+  cursor: pointer;
+  border-left: 3px solid var(--red);
+}
+.equip-header-left { display: flex; align-items: center; gap: 8px; }
+.equip-title { font-size: 14px; font-weight: 700; color: var(--red); }
+.equip-opt { font-size: 11px; color: var(--muted); font-weight: 400; }
+.equip-toggle { font-size: 12px; color: var(--muted); transition: transform .2s; }
+.equip-toggle.open { transform: rotate(180deg); }
+.equip-body { padding: 14px; display: none; }
+.equip-body.open { display: block; }
+.equip-body .field { margin-bottom: 12px; }
+.equip-body .field:last-child { margin-bottom: 0; }
+
+/* ── Camera / Media buttons ── */
+.media-section { margin-bottom: 20px; }
+.media-section-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--red); text-transform: uppercase; border-left: 3px solid var(--red); padding-left: 8px; margin-bottom: 14px; }
+.media-btns { display: flex; gap: 10px; margin-bottom: 12px; }
+.btn-camera {
+  flex: 1; padding: 14px 10px;
+  background: var(--red); color: var(--white);
+  border: none; border-radius: 10px;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-camera:active { background: var(--red-dk); }
+.btn-gallery {
+  flex: 1; padding: 14px 10px;
+  background: var(--white); color: var(--black);
+  border: 1.5px solid var(--gray2); border-radius: 10px;
+  font-size: 14px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-gallery:active { background: var(--gray1); }
+/* Hidden file inputs */
+.file-input { display: none; }
+
+.media-counter { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.media-hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: 10px; }
+
+/* ── Media grid ── */
+.media-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.media-thumb {
+  position: relative; aspect-ratio: 1;
+  border-radius: 8px; overflow: hidden;
+  background: var(--gray2);
+}
+.media-thumb img, .media-thumb video {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.media-thumb-del {
+  position: absolute; top: 4px; right: 4px;
+  width: 22px; height: 22px;
+  background: rgba(0,0,0,.6); color: #fff;
+  border: none; border-radius: 50%;
+  font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.media-info { font-size: 10px; color: var(--muted); text-align: center; margin-top: 4px; }
+
+/* ── Etiqueta ── */
+.label-size-btns { display: flex; gap: 10px; margin-bottom: 20px; }
+.btn-size {
+  flex: 1; padding: 12px;
+  border: 1.5px solid var(--gray2);
+  border-radius: 10px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; background: var(--white);
+  color: var(--black); text-align: center;
+}
+.btn-size.active { background: var(--black); color: var(--white); border-color: var(--black); }
+
+.label-preview-wrap {
+  background: var(--white);
+  border: 1.5px solid var(--gray2);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+  display: flex; justify-content: center;
+}
+.label-preview {
+  background: var(--white);
+  border: 1px solid #ccc;
+  font-family: Arial, sans-serif;
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 6px 8px;
+  gap: 8px;
+}
+.label-preview.size-30 { width: 189px; height: 113px; }  /* 50x30mm at 96dpi */
+.label-preview.size-40 { width: 189px; height: 151px; }  /* 50x40mm at 96dpi */
+#label-qr { flex-shrink: 0; order: -1; width: 56px; height: 56px; overflow: hidden; }
+#label-qr canvas, #label-qr img { width: 56px !important; height: 56px !important; }
+.label-left { flex: 1; order: 1; }
+.label-os-num { font-size: 13px; font-weight: 900; letter-spacing: .5px; }
+.label-os-num .l-os { font-size: 10px; font-weight: 700; color: #666; }
+.label-date { font-size: 9px; color: #555; margin-top: 3px; }
+.label-equip { font-size: 8px; color: #333; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+
+.btn-print {
+  width: 100%; padding: 15px;
+  background: var(--black); color: var(--white);
+  border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 700;
+  cursor: pointer; margin-bottom: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-print:active { background: #333; }
+.btn-drive {
+  width: 100%; padding: 15px;
+  background: var(--gray2); color: var(--muted);
+  border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 700;
+  cursor: not-allowed;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  position: relative;
+}
+.btn-drive-note { font-size: 11px; color: var(--muted); text-align: center; margin-top: 6px; }
+
+/* ── Print styles ── */
+@media print {
+  body > *:not(#print-only-label) { display: none !important; }
+  #print-only-label {
+    display: flex !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    padding: 2mm !important;
+    box-sizing: border-box !important;
+    background: white !important;
+    align-items: center !important;
+    gap: 2mm !important;
+  }
+  #print-only-label .label-preview {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    border: none !important;
+    padding: 0 !important;
+    gap: 2mm !important;
+    width: auto !important;
+    height: auto !important;
+  }
+}
+
+/* ── Camera Overlay ── */
+#cam-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: #000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+#cam-video {
+  width: 100%; max-height: 72vh; object-fit: cover;
+}
+.cam-toolbar {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; background: rgba(0,0,0,.75); z-index: 10;
+}
+.cam-btn-close {
+  background: none; border: none; color: #fff;
+  font-size: 26px; cursor: pointer; padding: 4px 10px; line-height: 1;
+}
+.cam-title { color: #fff; font-weight: 700; font-size: 15px; }
+.cam-controls {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px 16px; gap: 20px; background: rgba(0,0,0,.75); z-index: 10;
+}
+.cam-shutter {
+  width: 74px; height: 74px; border-radius: 50%;
+  background: #fff; border: 5px solid #ccc;
+  font-size: 28px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.cam-shutter:active { background: #ddd; }
+.cam-record-btn {
+  width: 74px; height: 74px; border-radius: 50%;
+  background: #CC0000; border: 5px solid #fff;
+  font-size: 22px; font-weight: 900; color: #fff;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.cam-record-btn.recording { background: #fff; color: #CC0000; }
+.cam-rec-label {
+  position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
+  color: #ff4444; font-weight: 700; font-size: 13px; white-space: nowrap;
+}
+/* Camera flash + counter */
+#cam-flash {
+  position: absolute; inset: 0; background: #fff;
+  opacity: 0; pointer-events: none; z-index: 50;
+}
+#cam-counter {
+  position: absolute; top: 60px; right: 16px;
+  background: rgba(0,0,0,.78); color: #fff;
+  padding: 5px 13px; border-radius: 20px;
+  font-size: 13px; font-weight: 700; z-index: 15; display: none;
+}
+/* Media preview overlay */
+#media-prev-overlay {
+  position: fixed; inset: 0; z-index: 201;
+  background: rgba(0,0,0,.97);
+  flex-direction: column;
+  align-items: center; justify-content: space-between;
+  display: none;
+}
+#media-prev-overlay.show { display: flex; }
+#media-prev-overlay img {
+  max-width: 100%; max-height: 72vh; object-fit: contain; margin-top: 60px;
+}
+#media-prev-overlay video {
+  max-width: 100%; max-height: 72vh; margin-top: 60px;
+}
+.media-prev-toolbar {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; background: rgba(0,0,0,.72); z-index: 10;
+}
+.media-prev-actions {
+  display: flex; gap: 12px; padding: 20px 16px 68px; width: 100%;
+}
+.btn-confirm-media {
+  flex: 1; padding: 15px; background: var(--green); color: #fff;
+  border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.btn-discard-media {
+  flex: 1; padding: 15px; background: #333; color: #fff;
+  border: none; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+/* Add equip / acess button */
+.btn-add-item {
+  width: 100%; padding: 13px; margin: 8px 0 4px;
+  background: var(--white); color: var(--red);
+  border: 2px dashed var(--red); border-radius: 10px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background .15s;
+}
+.btn-add-item:active { background: var(--red-lt); }
+/* Remove button on dynamic cards */
+.equip-remove-btn {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 16px; padding: 4px 6px; line-height: 1; border-radius: 6px;
+  transition: color .15s;
+}
+.equip-remove-btn:active { color: var(--red); }
+/* Acessórios — sem acessórios checkbox row */
+.no-items-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 0; margin-bottom: 4px;
+}
+.no-items-row input[type=checkbox] { width: 20px; height: 20px; cursor: pointer; accent-color: var(--red); }
+.no-items-row label { font-size: 15px; cursor: pointer; font-weight: 500; }
+/* NIIMBOT Bluetooth button */
+.btn-bt-print {
+  width: 100%; padding: 15px; margin: 10px 0 4px;
+  background: #1a73e8; color: #fff;
+  border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background .15s;
+}
+.btn-bt-print:active { background: #1557b0; }
+.btn-bt-print:disabled { background: #90a4ae; cursor: not-allowed; }
+/* Drive button active */
+.btn-drive-active {
+  width: 100%; padding: 15px; margin-bottom: 0;
+  background: #1a73e8; color: #fff;
+  border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-drive-active:active { background: #1255b8; }
+/* Download PNG button */
+.btn-download-png {
+  width: 100%; padding: 15px; margin: 8px 0 4px;
+  background: #2e7d32; color: #fff;
+  border: none; border-radius: 10px;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background .15s;
+}
+.btn-download-png:active { background: #1b5e20; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ CÂMERA OVERLAY ══ -->
+<div id="cam-overlay" style="display:none;">
+  <div class="cam-toolbar">
+    <button class="cam-btn-close" onclick="closeCamera()">✕</button>
+    <span id="cam-title" class="cam-title">📷 Câmera</span>
+    <div style="width:42px;"></div>
+  </div>
+  <div id="cam-flash"></div>
+  <div id="cam-counter"></div>
+  <video id="cam-video" autoplay playsinline muted></video>
+  <div class="cam-controls">
+    <div style="position:relative;">
+      <span id="cam-rec-label" class="cam-rec-label" style="display:none;">⏺ GRAVANDO</span>
+      <button id="cam-capture-btn" class="cam-shutter" onclick="capturePhoto()" style="display:none;">📷</button>
+      <button id="cam-record-btn" class="cam-record-btn" onclick="toggleRecording()" style="display:none;">⏺</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Media Preview Overlay ── -->
+<div id="media-prev-overlay">
+  <div class="media-prev-toolbar">
+    <button class="cam-btn-close" onclick="discardMedia()">✕</button>
+    <span id="media-prev-title" style="color:#fff;font-weight:700;font-size:15px;">Usar?</span>
+    <div style="width:42px;"></div>
+  </div>
+  <img id="media-prev-img" src="" alt="" style="display:none;">
+  <video id="media-prev-vid" controls playsinline style="display:none;"></video>
+  <div class="media-prev-actions" id="media-prev-actions">
+    <button class="btn-discard-media" onclick="discardMedia()">✕ Descartar</button>
+    <button class="btn-confirm-media" onclick="confirmMedia()">✓ Usar</button>
+  </div>
+</div>
+
+<div class="header">
+  <div class="header-title">SDAMED · RECEBIMENTO</div>
+  <div class="header-os"><span>OS</span>: <span id="hdr-os">——</span></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('videos')">
+    <span class="tab-icon">🎬</span>Vídeos
+  </div>
+  <div class="tab" onclick="switchTab('fotos')">
+    <span class="tab-icon">📷</span>Fotos
+  </div>
+  <div class="tab" onclick="switchTab('dados')">
+    <span class="tab-icon">📋</span>Dados
+  </div>
+  <div class="tab" onclick="switchTab('etiqueta')">
+    <span class="tab-icon">🏷️</span>Etiqueta
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ VÍDEOS ═══ -->
+<div id="tab-videos" class="tab-panel active">
+  <div class="media-section">
+    <div class="media-section-title">REGISTRAR VÍDEOS</div>
+    <div class="media-btns">
+      <button class="btn-camera" onclick="openCamera('videos')">🎥 Câmera</button>
+      <label class="btn-gallery" for="inp-vid-gal">🗂️ Galeria</label>
+    </div>
+    <input type="file" id="inp-vid-gal" class="file-input"
+           accept="video/*" multiple
+           onchange="addMedia(this,'videos',false)">
+    <div class="media-counter" id="cnt-videos">0 vídeos adicionados</div>
+    <div id="grid-videos" class="media-grid"></div>
+    <div class="media-hint">⚠️ Vídeos grandes podem demorar. Recomendado: máx. 50 MB por arquivo.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ FOTOS ════ -->
+<div id="tab-fotos" class="tab-panel">
+  <div class="media-section">
+    <div class="media-section-title">REGISTRAR FOTOS</div>
+    <div class="media-btns">
+      <button class="btn-camera" onclick="openCamera('fotos')">📷 Câmera</button>
+      <label class="btn-gallery" for="inp-foto-gal">🖼️ Galeria</label>
+    </div>
+    <input type="file" id="inp-foto-gal" class="file-input"
+           accept="image/*" multiple
+           onchange="addMedia(this,'fotos',false)">
+    <div class="media-counter" id="cnt-fotos">0 fotos adicionadas</div>
+    <div id="grid-fotos" class="media-grid"></div>
+    <div class="media-hint">📌 Fotografe: embalagem, etiqueta do equipamento, número de série, condição geral.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ DADOS ════ -->
+<div id="tab-dados" class="tab-panel">
+
+  <div class="section-title">IDENTIFICAÇÃO</div>
+
+  <div class="field">
+    <label>Número da OS <span class="req">*</span></label>
+    <input type="number" id="f-os" placeholder="Ex: 6123"
+           inputmode="numeric" oninput="updateHeaderOS()">
+  </div>
+  <div class="field">
+    <label>Nome do Remetente <span class="req">*</span></label>
+    <input type="text" id="f-remetente" placeholder="Nome completo do remetente">
+  </div>
+  <div class="field">
+    <label>Transportadora <span class="req">*</span></label>
+    <input type="text" id="f-transportadora" placeholder="Ex: Correios, Jadlog, Transportadora...">
+  </div>
+
+  <div class="section-title">EQUIPAMENTOS</div>
+
+  <div id="equip-container">
+  <!-- Equipamento 1 (obrigatório) -->
+  <div class="equip-card">
+    <div class="equip-header" onclick="toggleEquip('eq1')">
+      <div class="equip-header-left">
+        <span>🔧</span>
+        <span class="equip-title">Equipamento 1</span>
+      </div>
+      <span class="equip-toggle open" id="tog-eq1">▲</span>
+    </div>
+    <div class="equip-body open" id="body-eq1">
+      <div class="field">
+        <label>Nome / Modelo <span class="req">*</span></label>
+        <input type="text" id="eq1-modelo" placeholder="Ex: SDA101">
+      </div>
+      <div class="field">
+        <label>Número de Série (S/N)</label>
+        <input type="text" id="eq1-serie" placeholder="Número de série">
+      </div>
+      <div class="field">
+        <label>Número do Lote</label>
+        <input type="text" id="eq1-lote" placeholder="Lote">
+      </div>
+    </div>
+  </div>
+  </div><!-- end equip-container -->
+  <button class="btn-add-item" onclick="addEquipamento()">➕ Adicionar Equipamento</button>
+
+  <div class="section-title" style="margin-top:16px;">ACESSÓRIOS</div>
+
+  <div class="no-items-row">
+    <input type="checkbox" id="cb-sem-acess" checked onchange="toggleAcessorios(this)">
+    <label for="cb-sem-acess">Sem acessórios</label>
+  </div>
+
+  <div id="acess-container" style="display:none;"></div>
+  <button class="btn-add-item" id="btn-add-acess" style="display:none;" onclick="addAcessorio()">➕ Adicionar Acessório</button>
+
+  <div class="section-title" style="margin-top:16px;">VERIFICAÇÃO</div>
+
+  <div class="field">
+    <label>Condição da Embalagem <span class="req">*</span></label>
+    <select id="f-embalagem">
+      <option value="">Selecione...</option>
+      <option value="Boa">Boa</option>
+      <option value="Com avarias leves">Com avarias leves</option>
+      <option value="Com avarias graves">Com avarias graves</option>
+      <option value="Sem embalagem">Sem embalagem</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Equipamento conforme descrito na OS? <span class="req">*</span></label>
+    <select id="f-conforme">
+      <option value="">Selecione...</option>
+      <option value="Sim">Sim</option>
+      <option value="Não">Não</option>
+      <option value="Parcialmente">Parcialmente</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Observações gerais</label>
+    <textarea id="f-obs" placeholder="(opcional)"></textarea>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ ETIQUETA ═ -->
+<div id="tab-etiqueta" class="tab-panel">
+
+  <div class="section-title">TAMANHO DA ETIQUETA</div>
+  <div class="label-size-btns">
+    <button class="btn-size active" onclick="setLabelSize(30,this)">50 × 30 mm</button>
+    <button class="btn-size" onclick="setLabelSize(40,this)">50 × 40 mm</button>
+  </div>
+
+  <div class="section-title">PREVIEW DA ETIQUETA</div>
+  <div class="label-preview-wrap">
+    <div class="label-preview size-30" id="label-el">
+      <div id="label-qr"></div>
+      <div class="label-left">
+        <div class="label-os-num"><span class="l-os">OS </span><span id="lbl-os-num">——</span></div>
+        <div class="label-date" id="lbl-date"></div>
+        <div class="label-equip" id="lbl-equip"></div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-print" onclick="printLabel()">🖨️ Imprimir (navegador)</button>
+  <button class="btn-bt-print" id="btn-bt-print" onclick="printViaBluetooth()">🔵 Imprimir via Bluetooth</button>
+  <div id="bt-print-status" style="display:none;padding:8px 12px;margin:4px 0 8px;border-radius:8px;background:#eef8ee;font-size:13px;font-weight:500;"></div>
+  <button class="btn-download-png" onclick="downloadLabelPng()">⬇️ Baixar PNG (backup)</button>
+  <button class="btn-drive-active" id="btn-save-drive" onclick="saveToDrive()">☁️ Salvar no Drive</button>
+  <div class="btn-drive-note" id="drive-note">Salva fotos, vídeos e resumo na pasta da OS no Drive</div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+var state = {
+  fotos: [],
+  videos: []
+};
+var labelSizeMm = 30;
+var qrInstance = null;
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  var tabs = document.querySelectorAll('.tab');
+  var map = {videos:0, fotos:1, dados:2, etiqueta:3};
+  tabs[map[name]].classList.add('active');
+  if (name === 'etiqueta') updateLabel();
+}
+
+// ── Header OS number ───────────────────────────────────────────────────────
+function updateHeaderOS() {
+  var v = document.getElementById('f-os').value.trim() || '——';
+  document.getElementById('hdr-os').textContent = v;
+  document.getElementById('lbl-os-num').textContent = v;
+  updateQR();
+}
+
+// ── Equipment toggle ───────────────────────────────────────────────────────
+function toggleEquip(id) {
+  var body = document.getElementById('body-' + id);
+  var tog  = document.getElementById('tog-' + id);
+  if (!body || !tog) return;
+  var isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  tog.classList.toggle('open', !isOpen);
+  tog.textContent = isOpen ? '▼' : '▲';
+}
+
+// ── Dynamic Equipment ──────────────────────────────────────────────────────
+var equipCount = 1;
+function addEquipamento() {
+  equipCount++;
+  var n = equipCount;
+  var container = document.getElementById('equip-container');
+  var div = document.createElement('div');
+  div.className = 'equip-card';
+  div.id = 'equip-card-eq' + n;
+  div.innerHTML =
+    '<div class="equip-header" onclick="toggleEquip(\'eq' + n + '\')">' +
+      '<div class="equip-header-left">' +
+        '<span>🔧</span>' +
+        '<span class="equip-title">Equipamento ' + n + '</span>' +
+        '<span class="equip-opt">(opcional)</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;align-items:center;">' +
+        '<button class="equip-remove-btn" onclick="removeEquipamento(event,' + n + ')">✕</button>' +
+        '<span class="equip-toggle open" id="tog-eq' + n + '">▲</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="equip-body open" id="body-eq' + n + '">' +
+      '<div class="field"><label>Nome / Modelo</label>' +
+        '<input type="text" id="eq' + n + '-modelo" placeholder="Ex: SDA101"></div>' +
+      '<div class="field"><label>Número de Série (S/N)</label>' +
+        '<input type="text" id="eq' + n + '-serie" placeholder="Número de série"></div>' +
+      '<div class="field"><label>Número do Lote</label>' +
+        '<input type="text" id="eq' + n + '-lote" placeholder="Lote"></div>' +
+    '</div>';
+  container.appendChild(div);
+}
+function removeEquipamento(e, n) {
+  e.stopPropagation();
+  var card = document.getElementById('equip-card-eq' + n);
+  if (card) card.remove();
+}
+
+// ── Dynamic Accessories ────────────────────────────────────────────────────
+var acessCount = 0;
+function toggleAcessorios(cb) {
+  var container = document.getElementById('acess-container');
+  var addBtn    = document.getElementById('btn-add-acess');
+  var hide = cb.checked;
+  container.style.display = hide ? 'none' : '';
+  addBtn.style.display    = hide ? 'none' : '';
+}
+function addAcessorio() {
+  acessCount++;
+  var n = acessCount;
+  var container = document.getElementById('acess-container');
+  var div = document.createElement('div');
+  div.className = 'equip-card';
+  div.id = 'acess-card-' + n;
+  div.innerHTML =
+    '<div class="equip-header" onclick="toggleEquip(\'ac' + n + '\')">' +
+      '<div class="equip-header-left">' +
+        '<span>🧰</span>' +
+        '<span class="equip-title">Acessório ' + n + '</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;align-items:center;">' +
+        '<button class="equip-remove-btn" onclick="removeAcessorio(event,' + n + ')">✕</button>' +
+        '<span class="equip-toggle open" id="tog-ac' + n + '">▲</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="equip-body open" id="body-ac' + n + '">' +
+      '<div class="field"><label>Nome / Descrição</label>' +
+        '<input type="text" id="ac' + n + '-nome" placeholder="Ex: Cabo de alimentação, Manual..."></div>' +
+      '<div class="field"><label>Quantidade</label>' +
+        '<input type="number" id="ac' + n + '-qtd" placeholder="1" inputmode="numeric" min="1" value="1"' +
+        ' style="max-width:90px;"></div>' +
+      '<div class="field"><label>Observação</label>' +
+        '<input type="text" id="ac' + n + '-obs" placeholder="(opcional)"></div>' +
+    '</div>';
+  container.appendChild(div);
+}
+function removeAcessorio(e, n) {
+  e.stopPropagation();
+  var card = document.getElementById('acess-card-' + n);
+  if (card) card.remove();
+}
+
+// ── Media capture ──────────────────────────────────────────────────────────
+function addMedia(input, type, fromCamera) {
+  if (!input.files || !input.files.length) return;
+  var files = Array.from(input.files);
+  files.forEach(function(file) {
+    if (type === 'fotos') {
+      compressAndAdd(file);
+    } else {
+      addVideo(file);
+    }
+  });
+  input.value = ''; // reset so same file can be re-selected
+}
+
+function compressAndAdd(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var maxW = 1200;
+      var scale = img.width > maxW ? maxW / img.width : 1;
+      var w = Math.round(img.width * scale);
+      var h = Math.round(img.height * scale);
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      var origKB  = Math.round(file.size / 1024);
+      var compKB  = Math.round(dataUrl.length * 0.75 / 1024);
+      state.fotos.push({ dataUrl: dataUrl, origKB: origKB, compKB: compKB, name: file.name });
+      renderGrid('fotos');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function addVideo(file) {
+  var url = URL.createObjectURL(file);
+  state.videos.push({ url: url, name: file.name, sizeKB: Math.round(file.size / 1024) });
+  renderGrid('videos');
+}
+
+function renderGrid(type) {
+  var items = state[type];
+  var grid  = document.getElementById('grid-' + type);
+  var cnt   = document.getElementById('cnt-' + type);
+  var label = type === 'fotos' ? 'fotos adicionadas' : 'vídeos adicionados';
+  cnt.textContent = items.length + ' ' + label;
+  grid.innerHTML = '';
+  items.forEach(function(item, idx) {
+    var wrap = document.createElement('div');
+    wrap.className = 'media-thumb';
+    wrap.onclick = (function(t, i){ return function(){ showThumbPreview(t,i); }; })(type, idx);
+    if (type === 'fotos') {
+      var img = document.createElement('img');
+      img.src = item.dataUrl;
+      wrap.appendChild(img);
+    } else {
+      var vid = document.createElement('video');
+      vid.src = item.url;
+      vid.preload = 'metadata';
+      wrap.appendChild(vid);
+    }
+    var del = document.createElement('button');
+    del.className = 'media-thumb-del';
+    del.textContent = '✕';
+    del.onclick = (function(i) { return function(e) { e.stopPropagation(); removeMedia(type, i); }; })(idx);
+    wrap.appendChild(del);
+    var info = document.createElement('div');
+    info.className = 'media-info';
+    info.textContent = type === 'fotos'
+      ? (item.compKB + 'KB')
+      : (item.sizeKB + 'KB');
+    grid.appendChild(wrap);
+    grid.appendChild(info);
+  });
+}
+
+function removeMedia(type, idx) {
+  state[type].splice(idx, 1);
+  renderGrid(type);
+}
+
+// ── Label & QR ─────────────────────────────────────────────────────────────
+function setLabelSize(mm, btn) {
+  labelSizeMm = mm;
+  document.querySelectorAll('.btn-size').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  var el = document.getElementById('label-el');
+  el.className = 'label-preview size-' + mm;
+  updateLabel();
+}
+
+function updateLabel() {
+  var osNum  = document.getElementById('f-os') ? document.getElementById('f-os').value.trim() : '';
+  var equip  = document.getElementById('eq1-modelo') ? document.getElementById('eq1-modelo').value.trim() : '';
+  var serie  = document.getElementById('eq1-serie') ? document.getElementById('eq1-serie').value.trim() : '';
+
+  document.getElementById('lbl-os-num').textContent = osNum || '——';
+  document.getElementById('hdr-os').textContent = osNum || '——';
+
+  var today = new Date();
+  var d = String(today.getDate()).padStart(2,'0');
+  var m = String(today.getMonth()+1).padStart(2,'0');
+  var y = today.getFullYear();
+  document.getElementById('lbl-date').textContent = 'Entrada: ' + d + '/' + m + '/' + y;
+
+  var equipText = equip;
+  if (serie) equipText += ' · ' + serie;
+  document.getElementById('lbl-equip').textContent = equipText;
+
+  updateQR(osNum, equip, serie);
+}
+
+function updateQR() {
+  // Coleta todos os dados do formulário
+  var g = function(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  var os   = g('f-os');
+  var rem  = g('f-remetente');
+  var tra  = g('f-transportadora');
+  var emb  = g('f-embalagem');
+  var conf = g('f-conforme');
+  var obs  = g('f-obs');
+
+  // Coleta equipamentos dinamicamente (eq1 sempre, eq2..N se existirem)
+  var eqKeys = ['a','b','c','p','q','s','u','v','w','x'];
+  var eqData = [];
+  for (var i = 1; i <= equipCount; i++) {
+    var em = g('eq' + i + '-modelo');
+    var es = g('eq' + i + '-serie');
+    var el = g('eq' + i + '-lote');
+    if (em || es || el) eqData.push({ m: em, s: es, l: el });
+  }
+
+  // Coleta acessórios
+  var acessList = [];
+  for (var j = 1; j <= acessCount; j++) {
+    var acNome = g('ac' + j + '-nome');
+    var acQtd  = g('ac' + j + '-qtd');
+    if (acNome) acessList.push(acQtd ? acNome.slice(0,12) + 'x' + acQtd : acNome.slice(0,12));
+  }
+  var semAcess = document.getElementById('cb-sem-acess');
+  var acessStr = (semAcess && semAcess.checked) ? 'nenhum' : (acessList.length ? acessList.join(';') : '');
+
+  var today = new Date();
+  var d  = String(today.getDate()).padStart(2,'0');
+  var m  = String(today.getMonth()+1).padStart(2,'0');
+  var y  = String(today.getFullYear()).slice(2);
+  var hh = String(today.getHours()).padStart(2,'0');
+  var mi = String(today.getMinutes()).padStart(2,'0');
+
+  // Monta URL com todos os dados (params curtos para caber no QR)
+  var base = 'https://recebimento-os-sdamed.netlify.app/';
+  var p = [];
+  if (os)   p.push('o='   + encodeURIComponent(os));
+  if (rem)  p.push('r='   + encodeURIComponent(rem.slice(0,20)));
+  if (tra)  p.push('t='   + encodeURIComponent(tra.slice(0,15)));
+  // Adiciona até 3 equipamentos no QR
+  var eqAbc = [['a','b','c'],['p','q','s'],['u','v','w']];
+  eqData.slice(0,3).forEach(function(eq, idx) {
+    var keys = eqAbc[idx];
+    if (eq.m) p.push(keys[0] + '=' + encodeURIComponent(eq.m.slice(0,15)));
+    if (eq.s) p.push(keys[1] + '=' + encodeURIComponent(eq.s.slice(0,15)));
+    if (eq.l) p.push(keys[2] + '=' + encodeURIComponent(eq.l.slice(0,10)));
+  });
+  if (emb)       p.push('e='  + encodeURIComponent(emb));
+  if (conf)      p.push('f='  + encodeURIComponent(conf));
+  if (obs)       p.push('g='  + encodeURIComponent(obs.slice(0,30)));
+  if (acessStr)  p.push('ac=' + encodeURIComponent(acessStr.slice(0,40)));
+  p.push('d=' + d + m + y + hh + mi);
+
+  var qrData = base + '?' + p.join('&');
+
+  var container = document.getElementById('label-qr');
+  container.innerHTML = '';
+
+  try {
+    new QRCode(container, {
+      text: qrData,
+      width:  220,
+      height: 220,
+      colorDark: '#000000',
+      colorLight: '#FFFFFF',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e) {
+    // Fallback: só OS e data se URL for longa demais
+    try {
+      new QRCode(container, {
+        text: base + '?o=' + encodeURIComponent(os) + '&d=' + d + m + y,
+        width:  220,
+        height: 220,
+        colorDark: '#000000',
+        colorLight: '#FFFFFF',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    } catch(e2) {}
+  }
+}
+
+// ── Print ───────────────────────────────────────────────────────────────────
+function printLabel() {
+  updateLabel();
+  var heightMm = labelSizeMm === 40 ? '40mm' : '30mm';
+
+  // Captura o QR code canvas como imagem (evita perder o canvas ao clonar)
+  var qrCanvas = document.querySelector('#label-qr canvas');
+  var qrSrc = qrCanvas ? qrCanvas.toDataURL('image/png') : '';
+  var qrPx   = qrCanvas ? Math.min(qrCanvas.width, 100) : 0;
+
+  // Lê textos do label
+  var osNum   = (document.getElementById('lbl-os-num')  || {}).textContent || '——';
+  var dateTxt = (document.getElementById('lbl-date')    || {}).textContent || '';
+  var eqTxt   = (document.getElementById('lbl-equip')   || {}).textContent || '';
+
+  // QR ocupa ~40% da largura (50mm) → ~18mm; para 50×30 fica mais justo
+  var qrMm = labelSizeMm === 40 ? '18mm' : '15mm';
+
+  var ifrHtml =
+    '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+    '<style>' +
+    '@page{size:50mm '+heightMm+';margin:0}' +
+    'body{margin:0;padding:0;width:50mm;height:'+heightMm+';overflow:hidden}' +
+    '.lbl{display:flex;flex-direction:row;align-items:center;' +
+         'width:50mm;height:'+heightMm+';padding:1.5mm;gap:2mm;' +
+         'box-sizing:border-box;background:#fff;font-family:Arial,sans-serif}' +
+    '.qr{flex-shrink:0;width:'+qrMm+';height:'+qrMm+'}' +
+    '.qr img{display:block;width:100%;height:100%;object-fit:contain}' +
+    '.inf{flex:1;min-width:0;overflow:hidden}' +
+    '.os{font-size:11px;font-weight:900;letter-spacing:.5px}' +
+    '.dt{font-size:9px;color:#333;margin-top:1px}' +
+    '.eq{font-size:8px;color:#555;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '</style></head><body>' +
+    '<div class="lbl">' +
+    (qrSrc ? '<div class="qr"><img src="'+qrSrc+'"></div>' : '') +
+    '<div class="inf">' +
+    '<div class="os">OS '+osNum+'</div>' +
+    '<div class="dt">'+dateTxt+'</div>' +
+    '<div class="eq">'+eqTxt+'</div>' +
+    '</div></div>' +
+    '</body></html>';
+
+  // Cria iframe oculto — sem mexer no DOM visível
+  var iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:50mm;height:'+heightMm+';border:0;visibility:hidden';
+  document.body.appendChild(iframe);
+
+  var ifrDoc = iframe.contentDocument || iframe.contentWindow.document;
+  ifrDoc.open(); ifrDoc.write(ifrHtml); ifrDoc.close();
+
+  // Atualiza @page com o tamanho correto
+  var sizeStyle = document.getElementById('niimbot-size');
+  if (sizeStyle) sizeStyle.textContent = '@page{size:50mm '+heightMm+';margin:0}';
+
+  setTimeout(function() {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch(e) {
+      // fallback: abre nova aba para impressão
+      var w = window.open('','_blank','width=300,height=200');
+      if (w) { w.document.write(ifrHtml); w.document.close(); w.print(); }
+    }
+    setTimeout(function() {
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    }, 3000);
+  }, 300);
+}
+
+// ── URL auto-fill ───────────────────────────────────────────────────────────
+function loadFromURL() {
+  if (!window.location.search) return;
+  var params = new URLSearchParams(window.location.search);
+  if (!params.get('o')) return;
+  var sv = function(id, key) {
+    var val = params.get(key);
+    if (!val) return;
+    var el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+  sv('f-os','o'); sv('f-remetente','r'); sv('f-transportadora','t');
+  sv('eq1-modelo','a'); sv('eq1-serie','b'); sv('eq1-lote','c');
+  sv('eq2-modelo','p'); sv('eq2-serie','q'); sv('eq2-lote','s');
+  sv('f-embalagem','e'); sv('f-conforme','f'); sv('f-obs','g');
+  updateLabel();
+  // Banner de confirmação
+  var ban = document.createElement('div');
+  ban.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#CC0000;color:#fff;text-align:center;padding:10px 16px;font-size:13px;font-weight:700;z-index:9999;cursor:pointer';
+  ban.textContent = '📷 Dados carregados do QR — OS ' + params.get('o') + '  (toque para fechar)';
+  ban.onclick = function() { ban.parentNode && ban.parentNode.removeChild(ban); };
+  document.body.appendChild(ban);
+  setTimeout(function() { ban.parentNode && ban.parentNode.removeChild(ban); }, 5000);
+}
+
+// ── Camera (getUserMedia) ──────────────────────────────────────────────────
+var currentLocation = null;
+var camStream = null;
+var mediaRecorder = null;
+var recordedChunks = [];
+var camType = null;
+var pendingCapture = null;
+var camPhotoCount = 0;
+var driveToken = null;
+// Drive config — substitua pelo seu Client ID do Google Cloud
+// 1. console.cloud.google.com → criar projeto → ativar Drive API
+// 2. Credenciais → OAuth 2.0 → Web App → adicionar recebimento-os-sdamed.netlify.app
+var DRIVE_CLIENT_ID = '';
+var DRIVE_ROOT_ID   = '1WkvNlA_TFkrloSZStoPdVraoewQAXq-q';
+var DRIVE_2026_ID   = '1zS-9lsVY5Gdt5ueGWkBNg73yQAu1EBTq';
+var MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function openCamera(type) {
+  camType = type;
+  var overlay = document.getElementById('cam-overlay');
+  var captureBtn = document.getElementById('cam-capture-btn');
+  var recordBtn = document.getElementById('cam-record-btn');
+  var recLabel = document.getElementById('cam-rec-label');
+  var title = document.getElementById('cam-title');
+
+  if (type === 'fotos') {
+    title.textContent = '📷 Câmera — Foto';
+    captureBtn.style.display = 'flex';
+    recordBtn.style.display = 'none';
+  } else {
+    title.textContent = '🎥 Câmera — Vídeo';
+    captureBtn.style.display = 'none';
+    recordBtn.style.display = 'flex';
+    recordBtn.textContent = '⏺';
+    recordBtn.classList.remove('recording');
+    recLabel.style.display = 'none';
+  }
+
+  overlay.style.display = 'flex';
+
+  // Pega localização (endereço) para o timestamp da foto
+  if (navigator.geolocation && !currentLocation) {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      var lat = pos.coords.latitude, lon = pos.coords.longitude;
+      fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat='+lat+'&lon='+lon, {headers:{'Accept-Language':'pt-BR,pt;q=0.9'}})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          var a = d.address||{};
+          var parts = [];
+          if(a.road) parts.push(a.road);
+          if(a.suburb||a.neighbourhood) parts.push(a.suburb||a.neighbourhood);
+          if(a.city||a.town||a.municipality) parts.push(a.city||a.town||a.municipality);
+          currentLocation = parts.length ? parts.join(', ') : lat.toFixed(4)+', '+lon.toFixed(4);
+        }).catch(function(){ currentLocation = lat.toFixed(5)+', '+lon.toFixed(5); });
+    }, function(){ currentLocation = null; }, {timeout:8000});
+  }
+  // Reset photo counter
+  camPhotoCount = 0;
+  document.getElementById('cam-counter').style.display = 'none';
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    overlay.style.display = 'none';
+    alert('Câmera não suportada neste navegador. Use o botão Galeria para selecionar um arquivo.');
+    return;
+  }
+
+  var constraints = { video: { facingMode: 'environment' } };
+  if (type === 'videos') constraints.audio = true;
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then(function(stream) {
+      camStream = stream;
+      var video = document.getElementById('cam-video');
+      video.srcObject = stream;
+    })
+    .catch(function(err) {
+      overlay.style.display = 'none';
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        alert('Permissão de câmera negada.\nAbra as configurações do navegador e permita o acesso à câmera para este site.');
+      } else if (err.name === 'NotFoundError') {
+        alert('Câmera não encontrada no dispositivo.');
+      } else {
+        alert('Não foi possível acessar a câmera: ' + err.message);
+      }
+    });
+}
+
+function closeCamera() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return; // onstop will call closeCamera via finish flow
+  }
+  if (camStream) {
+    camStream.getTracks().forEach(function(t) { t.stop(); });
+    camStream = null;
+  }
+  var video = document.getElementById('cam-video');
+  video.srcObject = null;
+  document.getElementById('cam-overlay').style.display = 'none';
+  pendingCapture = null;
+  document.getElementById('media-prev-overlay').classList.remove('show');
+  document.getElementById('media-prev-img').src = '';
+  var mpv = document.getElementById('media-prev-vid'); mpv.pause(); mpv.src = '';
+  camPhotoCount = 0;
+  document.getElementById('cam-counter').style.display = 'none';
+  mediaRecorder = null;
+  recordedChunks = [];
+}
+
+function capturePhoto() {
+  var video = document.getElementById('cam-video');
+  if (!video.videoWidth) return;
+  var canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  // ── Timestamp overlay ──────────────────────────────────────────────────
+  var now = new Date();
+  var dateStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var osNum = document.getElementById('f-os') ? document.getElementById('f-os').value.trim() : '';
+  var lines = ['SDAMed'];
+  if (osNum) lines.push('OS: ' + osNum);
+  lines.push(dateStr);
+  if (currentLocation) lines.push('📍 ' + currentLocation);
+
+  var fSize = Math.max(14, Math.round(canvas.height * 0.028));
+  ctx.font = 'bold ' + fSize + 'px Arial';
+  var padX = Math.round(fSize * 0.6);
+  var padY = Math.round(fSize * 0.5);
+  var lineH = Math.round(fSize * 1.4);
+  var boxW = 0;
+  lines.forEach(function(l) { boxW = Math.max(boxW, ctx.measureText(l).width); });
+  boxW += padX * 2;
+  var boxH = lines.length * lineH + padY * 2;
+  var bx = 8;
+  var by = canvas.height - boxH - 8;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  // Rounded rect
+  var r = 6;
+  ctx.beginPath();
+  ctx.moveTo(bx+r, by); ctx.lineTo(bx+boxW-r, by);
+  ctx.quadraticCurveTo(bx+boxW, by, bx+boxW, by+r);
+  ctx.lineTo(bx+boxW, by+boxH-r);
+  ctx.quadraticCurveTo(bx+boxW, by+boxH, bx+boxW-r, by+boxH);
+  ctx.lineTo(bx+r, by+boxH);
+  ctx.quadraticCurveTo(bx, by+boxH, bx, by+boxH-r);
+  ctx.lineTo(bx, by+r);
+  ctx.quadraticCurveTo(bx, by, bx+r, by);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  lines.forEach(function(line, i) {
+    ctx.fillText(line, bx + padX, by + padY + fSize + i * lineH);
+  });
+  // ── fim do overlay ─────────────────────────────────────────────────────
+
+  // compress
+  var maxW = 1200;
+  var scale = canvas.width > maxW ? maxW / canvas.width : 1;
+  if (scale < 1) {
+    var c2 = document.createElement('canvas');
+    c2.width = Math.round(canvas.width * scale);
+    c2.height = Math.round(canvas.height * scale);
+    c2.getContext('2d').drawImage(canvas, 0, 0, c2.width, c2.height);
+    canvas = c2;
+  }
+  var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+  var compKB = Math.round(dataUrl.length * 0.75 / 1024);
+  // Flash effect
+  var fl = document.getElementById('cam-flash');
+  fl.style.transition = 'none'; fl.style.opacity = '1';
+  setTimeout(function(){ fl.style.transition = 'opacity 0.25s'; fl.style.opacity = '0'; }, 60);
+  // Show preview — camera stays open
+  var pNow = new Date();
+  var pTs = pNow.getFullYear()+String(pNow.getMonth()+1).padStart(2,'0')+String(pNow.getDate()).padStart(2,'0')+'_'+String(pNow.getHours()).padStart(2,'0')+String(pNow.getMinutes()).padStart(2,'0')+String(pNow.getSeconds()).padStart(2,'0');
+  pendingCapture = { type:'fotos', dataUrl:dataUrl, compKB:compKB, name:'foto_'+pTs+'.jpg' };
+  var pov = document.getElementById('media-prev-overlay');
+  document.getElementById('media-prev-img').src = dataUrl;
+  document.getElementById('media-prev-img').style.display = 'block';
+  document.getElementById('media-prev-vid').style.display = 'none';
+  document.getElementById('media-prev-vid').src = '';
+  document.getElementById('media-prev-title').textContent = 'Usar esta foto?';
+  document.getElementById('media-prev-actions').style.display = 'flex';
+  pov.dataset.viewOnly = '';
+  pov.classList.add('show');
+}
+
+function toggleRecording() {
+  var btn = document.getElementById('cam-record-btn');
+  var recLabel = document.getElementById('cam-rec-label');
+
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+    recordedChunks = [];
+    var mimeType = 'video/webm;codecs=vp9';
+    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
+    var opts = mimeType ? { mimeType: mimeType } : {};
+    try { mediaRecorder = new MediaRecorder(camStream, opts); }
+    catch(e) { mediaRecorder = new MediaRecorder(camStream); }
+
+    mediaRecorder.ondataavailable = function(e) {
+      if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = function() {
+      var mime = mediaRecorder.mimeType || 'video/webm';
+      var blob = new Blob(recordedChunks, { type: mime });
+      var url = URL.createObjectURL(blob);
+      var sizeKB = Math.round(blob.size / 1024);
+      var vNow = new Date();
+      var vTs = vNow.getFullYear()+String(vNow.getMonth()+1).padStart(2,'0')+String(vNow.getDate()).padStart(2,'0')+'_'+String(vNow.getHours()).padStart(2,'0')+String(vNow.getMinutes()).padStart(2,'0')+String(vNow.getSeconds()).padStart(2,'0');
+      pendingCapture = { type:'videos', url:url, name:'video_'+vTs+'.webm', sizeKB:sizeKB };
+      var pov = document.getElementById('media-prev-overlay');
+      document.getElementById('media-prev-img').style.display = 'none';
+      document.getElementById('media-prev-img').src = '';
+      var pv = document.getElementById('media-prev-vid');
+      pv.src = url; pv.style.display = 'block';
+      document.getElementById('media-prev-title').textContent = 'Usar este vídeo?';
+      document.getElementById('media-prev-actions').style.display = 'flex';
+      pov.dataset.viewOnly = '';
+      pov.classList.add('show');
+      mediaRecorder = null;
+      recordedChunks = [];
+    };
+
+    mediaRecorder.start();
+    btn.textContent = '⏹';
+    btn.classList.add('recording');
+    recLabel.style.display = 'block';
+  } else {
+    mediaRecorder.stop();
+    btn.textContent = '⏺';
+    btn.classList.remove('recording');
+    recLabel.style.display = 'none';
+  }
+}
+
+// ── Confirm / Discard / View media ─────────────────────────────────────────
+function confirmMedia() {
+  if (!pendingCapture) return;
+  var pov = document.getElementById('media-prev-overlay');
+  pov.classList.remove('show');
+  document.getElementById('media-prev-img').src = '';
+  var pv = document.getElementById('media-prev-vid'); pv.pause(); pv.src = '';
+  if (pendingCapture.type === 'fotos') {
+    state.fotos.push({ dataUrl: pendingCapture.dataUrl, compKB: pendingCapture.compKB, origKB: pendingCapture.compKB, name: pendingCapture.name });
+    renderGrid('fotos');
+    camPhotoCount++;
+    var ctr = document.getElementById('cam-counter');
+    ctr.textContent = camPhotoCount + (camPhotoCount === 1 ? ' foto' : ' fotos');
+    ctr.style.display = 'block';
+  } else {
+    state.videos.push({ url: pendingCapture.url, name: pendingCapture.name, sizeKB: pendingCapture.sizeKB });
+    renderGrid('videos');
+    if (camStream) { camStream.getTracks().forEach(function(t){ t.stop(); }); camStream = null; }
+    document.getElementById('cam-video').srcObject = null;
+    document.getElementById('cam-overlay').style.display = 'none';
+    camPhotoCount = 0;
+    document.getElementById('cam-counter').style.display = 'none';
+  }
+  pendingCapture = null;
+}
+
+function discardMedia() {
+  pendingCapture = null;
+  var pov = document.getElementById('media-prev-overlay');
+  pov.classList.remove('show');
+  pov.dataset.viewOnly = '';
+  document.getElementById('media-prev-img').src = '';
+  var pv = document.getElementById('media-prev-vid'); pv.pause(); pv.src = '';
+  document.getElementById('media-prev-actions').style.display = 'flex';
+}
+
+function showThumbPreview(type, idx) {
+  var item = state[type][idx];
+  var pov = document.getElementById('media-prev-overlay');
+  var pImg = document.getElementById('media-prev-img');
+  var pVid = document.getElementById('media-prev-vid');
+  if (type === 'fotos') {
+    pImg.src = item.dataUrl; pImg.style.display = 'block';
+    pVid.style.display = 'none'; pVid.src = '';
+    document.getElementById('media-prev-title').textContent = 'Foto ' + (idx+1) + ' / ' + state.fotos.length;
+  } else {
+    pImg.style.display = 'none'; pImg.src = '';
+    pVid.src = item.url; pVid.style.display = 'block';
+    document.getElementById('media-prev-title').textContent = 'Vídeo ' + (idx+1);
+  }
+  document.getElementById('media-prev-actions').style.display = 'none';
+  pov.dataset.viewOnly = 'true';
+  pov.classList.add('show');
+}
+
+// ── Google Drive ────────────────────────────────────────────────────────────
+function saveToDrive() {
+  var osNum = document.getElementById('f-os').value.trim();
+  if (!osNum) { alert('Preencha o número da OS antes de salvar no Drive.'); return; }
+  if (!DRIVE_CLIENT_ID) {
+    alert('Drive não configurado.\n\nPeça ao administrador para adicionar o Client ID do Google no código.');
+    return;
+  }
+  if (!driveToken) {
+    if (!window.google || !window.google.accounts) {
+      alert('API do Google não carregou ainda. Aguarde alguns segundos e tente novamente.');
+      return;
+    }
+    var client = google.accounts.oauth2.initTokenClient({
+      client_id: DRIVE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive.file',
+      callback: function(resp) {
+        if (resp.error) { alert('Erro de autenticação Google: ' + resp.error); return; }
+        driveToken = resp.access_token;
+        doSaveToDrive();
+      }
+    });
+    client.requestAccessToken();
+  } else {
+    doSaveToDrive();
+  }
+}
+
+async function driveReq(method, url, data, isRaw) {
+  var opts = { method:method, headers:{ 'Authorization':'Bearer '+driveToken } };
+  if (data && !isRaw) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(data); }
+  else if (isRaw) { opts.body=data; }
+  var r = await fetch(url, opts);
+  if (!r.ok) { var t=await r.text(); throw new Error('Drive '+r.status+': '+t.slice(0,120)); }
+  return r.json();
+}
+
+async function driveFolder(name, parentId) {
+  var q = "name='"+name.replace(/'/g,"\\'")+("' and mimeType='application/vnd.google-apps.folder' and '")+parentId+"' in parents and trashed=false";
+  var r = await driveReq('GET','https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id)');
+  if (r.files && r.files.length) return r.files[0].id;
+  var c = await driveReq('POST','https://www.googleapis.com/drive/v3/files',{name:name,mimeType:'application/vnd.google-apps.folder',parents:[parentId]});
+  return c.id;
+}
+
+async function driveUpload(name, content, mime, parentId) {
+  var meta={name:name,parents:[parentId]};
+  var bnd='sdabnd'+Date.now();
+  var enc=new TextEncoder();
+  var hdr=enc.encode('--'+bnd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+'\r\n--'+bnd+'\r\nContent-Type: '+mime+'\r\n\r\n');
+  var ftr=enc.encode('\r\n--'+bnd+'--');
+  var body=new Uint8Array(hdr.length+content.length+ftr.length);
+  body.set(hdr,0); body.set(content,hdr.length); body.set(ftr,hdr.length+content.length);
+  var r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+    method:'POST',headers:{'Authorization':'Bearer '+driveToken,'Content-Type':'multipart/related; boundary='+bnd},body:body
+  });
+  if(!r.ok) throw new Error('Upload falhou: '+r.status);
+  return r.json();
+}
+
+async function doSaveToDrive() {
+  var btn=document.getElementById('btn-save-drive'), note=document.getElementById('drive-note');
+  var osNum=document.getElementById('f-os').value.trim();
+  btn.textContent='⏳ Salvando...'; btn.disabled=true;
+  note.textContent='Criando pastas no Drive...';
+  try {
+    var now=new Date();
+    var yr=now.getFullYear(), monthName=MONTHS_PT[now.getMonth()];
+    var dateStr=yr+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0');
+    var timeStr=String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
+    var yearId=(yr===2026)?DRIVE_2026_ID:await driveFolder(String(yr),DRIVE_ROOT_ID);
+    var monthId=await driveFolder(monthName,yearId);
+    var osId=await driveFolder('OS-'+osNum,monthId);
+    var recId=await driveFolder('recebimento',osId);
+    // Summary
+    var g=function(id){var el=document.getElementById(id);return el?el.value.trim():'';};
+    var txt='OS: '+osNum+'\nData: '+now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR')+
+      '\nRemetente: '+g('f-remetente')+'\nTransportadora: '+g('f-transportadora')+
+      '\nEquip 1: '+g('eq1-modelo')+' | SN: '+g('eq1-serie')+' | Lote: '+g('eq1-lote')+
+      '\nEquip 2: '+g('eq2-modelo')+' | SN: '+g('eq2-serie')+' | Lote: '+g('eq2-lote')+
+      '\nEmbalagem: '+g('f-embalagem')+'\nConforme: '+g('f-conforme')+'\nObs: '+g('f-obs');
+    note.textContent='Salvando resumo...';
+    await driveUpload('recebimento_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.txt',(new TextEncoder()).encode(txt),'text/plain',recId);
+    // Photos
+    for(var i=0;i<state.fotos.length;i++){
+      note.textContent='Enviando foto '+(i+1)+' de '+state.fotos.length+'...';
+      var fo=state.fotos[i];
+      var b64=fo.dataUrl.split(',')[1], bin=atob(b64), by=new Uint8Array(bin.length);
+      for(var j=0;j<bin.length;j++) by[j]=bin.charCodeAt(j);
+      var pNow=new Date();
+      var pTs=pNow.getFullYear()+String(pNow.getMonth()+1).padStart(2,'0')+String(pNow.getDate()).padStart(2,'0')+'_'+String(pNow.getHours()).padStart(2,'0')+String(pNow.getMinutes()).padStart(2,'0')+String(pNow.getSeconds()+i).padStart(2,'0');
+      await driveUpload('ordem de serviço '+pTs+' - SDAMed.jpg',by,'image/jpeg',recId);
+    }
+    // Videos
+    for(var i=0;i<state.videos.length;i++){
+      note.textContent='Enviando vídeo '+(i+1)+' de '+state.videos.length+'...';
+      var vi=state.videos[i];
+      var vBuf=await (await fetch(vi.url)).arrayBuffer();
+      var vNow=new Date();
+      var vTs=vNow.getFullYear()+String(vNow.getMonth()+1).padStart(2,'0')+String(vNow.getDate()).padStart(2,'0')+'_'+String(vNow.getHours()).padStart(2,'0')+String(vNow.getMinutes()).padStart(2,'0')+String(vNow.getSeconds()+i).padStart(2,'0');
+      await driveUpload('ordem de serviço '+vTs+' - SDAMed.mp4',new Uint8Array(vBuf),'video/webm',recId);
+    }
+    btn.textContent='✅ Salvo!'; btn.style.background='#2e7d32';
+    note.textContent='✓ '+state.fotos.length+' foto(s) + '+state.videos.length+' vídeo(s) → '+monthName+'/OS-'+osNum;
+    setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';btn.disabled=false;},4000);
+  } catch(e) {
+    btn.textContent='❌ Erro'; btn.disabled=false;
+    note.textContent='Erro: '+e.message;
+    if(e.message&&e.message.includes('401')) driveToken=null;
+    setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';},3000);
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+(function init() {
+  var today = new Date();
+  var d = String(today.getDate()).padStart(2,'0');
+  var m = String(today.getMonth()+1).padStart(2,'0');
+  var y = today.getFullYear();
+  document.getElementById('lbl-date').textContent = 'Entrada: ' + d + '/' + m + '/' + y;
+  updateQR();
+  loadFromURL();
+})();
+
+
+// ── Renderiza a etiqueta em um canvas 384×PH já criado ──
+function renderLabelCanvas(ctx, PW, PH) {
+  var osNum = document.getElementById('lbl-os-num').textContent;
+  var dtTxt = document.getElementById('lbl-date').textContent;
+  var eqTxt = document.getElementById('lbl-equip').textContent;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, PW, PH);
+  ctx.strokeStyle = '#cccccc';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, PW - 1, PH - 1);
+
+  var PAD = 10;
+  var QR  = 110;
+  var qrX = PAD;
+  var qrY = Math.round((PH - QR) / 2);
+  var vSep = qrX + QR + 8;
+
+  ctx.strokeStyle = '#dddddd';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(vSep, PAD); ctx.lineTo(vSep, PH - PAD);
+  ctx.stroke();
+
+  var qrCanvas = document.querySelector('#label-qr canvas');
+  if (qrCanvas) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(qrCanvas, qrX, qrY, QR, QR);
+    ctx.imageSmoothingEnabled = true;
+  }
+
+  var TX = vSep + PAD;
+  var TW = PW - TX - PAD;
+
+  ctx.font = '10px Arial';
+  ctx.fillStyle = '#999999';
+  ctx.fillText('ORDEM DE SERVIÇO', TX, 14);
+
+  ctx.fillStyle = '#000000';
+  ctx.font = 'bold 55px Arial';
+  ctx.fillText(osNum || '——', TX, 74);
+
+  ctx.strokeStyle = '#dddddd';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(TX, 83); ctx.lineTo(PW - PAD, 83);
+  ctx.stroke();
+
+  ctx.fillStyle = '#000000';
+  ctx.font = 'bold 14px Arial';
+  var words = eqTxt.split(' '), ln = '', y = 100;
+  words.forEach(function(w) {
+    var test = ln ? ln + ' ' + w : w;
+    if (ctx.measureText(test).width > TW && ln) {
+      ctx.fillText(ln, TX, y); y += 17; ln = w;
+    } else { ln = test; }
+  });
+  if (ln) ctx.fillText(ln, TX, y);
+
+  ctx.font = '11px Arial';
+  ctx.fillStyle = '#666666';
+  ctx.fillText(dtTxt, TX, PH - 8);
+
+  ctx.font = '9px Arial';
+  ctx.fillStyle = '#bbbbbb';
+  ctx.textAlign = 'right';
+  ctx.fillText('SDAMed', PW - PAD, PH - 8);
+  ctx.textAlign = 'left';
+}
+
+function downloadLabelPng() {
+  updateLabel();
+  var PW = 384;
+  var PH = labelSizeMm === 30 ? 230 : 307;
+  var canvas = document.createElement('canvas');
+  canvas.width = PW; canvas.height = PH;
+  var ctx = canvas.getContext('2d');
+
+  renderLabelCanvas(ctx, PW, PH);
+
+  // Converter para 1-bit preto/branco puro
+  var imgData = ctx.getImageData(0, 0, PW, PH);
+  var px = imgData.data;
+  for (var i = 0; i < px.length; i += 4) {
+    var gray = 0.299 * px[i] + 0.587 * px[i+1] + 0.114 * px[i+2];
+    var v = gray < 180 ? 0 : 255;
+    px[i] = px[i+1] = px[i+2] = v;
+    px[i+3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  var link = document.createElement('a');
+  var osVal = document.getElementById('f-os') ? document.getElementById('f-os').value.trim() : '';
+  link.download = (osVal ? 'OS-' + osVal : 'etiqueta') + '.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+// ── Impressão direta via Web Bluetooth → NIIMBOT B1 ──
+// Protocolo: pacote [0x55 0x55 CMD LEN DATA... CHECKSUM 0xAA 0xAA]
+// Connect prefixado com 0x03. Checksum = XOR(CMD, LEN, DATA...)
+async function printViaBluetooth() {
+  if (!navigator.bluetooth) {
+    alert('Web Bluetooth não disponível.\nUse Google Chrome (desktop ou Android).\nNão funciona em Safari, Firefox ou Edge Mobile.');
+    return;
+  }
+
+  updateLabel();
+
+  var PW = 384;
+  var PH = labelSizeMm === 30 ? 230 : 307;
+  var canvas = document.createElement('canvas');
+  canvas.width = PW; canvas.height = PH;
+  var ctx = canvas.getContext('2d');
+  renderLabelCanvas(ctx, PW, PH);
+
+  // Converter pixels do canvas para linhas 1-bit (48 bytes por linha = 384px)
+  var imgData = ctx.getImageData(0, 0, PW, PH);
+  var px = imgData.data;
+  var BYTES = 48; // 384/8
+  var rows = [];
+  for (var row = 0; row < PH; row++) {
+    var rb = new Uint8Array(BYTES);
+    for (var col = 0; col < PW; col++) {
+      var pi = (row * PW + col) * 4;
+      var gray = 0.299 * px[pi] + 0.587 * px[pi+1] + 0.114 * px[pi+2];
+      if (gray < 180) { // pixel preto
+        rb[Math.floor(col / 8)] |= (1 << (7 - (col % 8))); // MSB first
+      }
+    }
+    rows.push(rb);
+  }
+
+  var statusEl = document.getElementById('bt-print-status');
+  function setStatus(msg, isError) {
+    if (!statusEl) return;
+    statusEl.textContent = msg;
+    statusEl.style.background = isError ? '#fff0f0' : '#eef8ee';
+    statusEl.style.color = isError ? '#c00' : '#060';
+    statusEl.style.display = msg ? 'block' : 'none';
+  }
+  var btn = document.getElementById('btn-bt-print');
+  function setBtnDisabled(dis) { if (btn) btn.disabled = dis; }
+
+  setBtnDisabled(true);
+  setStatus('🔍 Procurando impressora NIIMBOT B1...');
+
+  var device;
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] }]
+    });
+  } catch(e) {
+    setBtnDisabled(false);
+    if (e.name === 'NotFoundError' || e.name === 'AbortError') { setStatus('', false); return; }
+    setStatus('❌ ' + e.message, true);
+    return;
+  }
+
+  setStatus('🔗 Conectando ao ' + (device.name || 'dispositivo') + '...');
+
+  var gatt = null, channel = null;
+  try {
+    // Tenta conectar com retry (BLE às vezes cai na primeira tentativa)
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        gatt = await device.gatt.connect();
+        break;
+      } catch(e) {
+        if (attempt === 3) throw e;
+        await new Promise(function(r) { setTimeout(r, 500); });
+        if (gatt) gatt.disconnect();
+      }
+    }
+    var services = await gatt.getPrimaryServices();
+    for (var svc of services) {
+      var chars = await svc.getCharacteristics();
+      for (var c of chars) {
+        if (c.properties.notify && c.properties.writeWithoutResponse) {
+          channel = c; break;
+        }
+      }
+      if (channel) break;
+    }
+    if (!channel) throw new Error('Característica de comunicação não encontrada');
+  } catch(e) {
+    if (gatt) try { gatt.disconnect(); } catch(_) {}
+    setBtnDisabled(false);
+    setStatus('❌ Falha na conexão: ' + e.message, true);
+    return;
+  }
+
+  // Monta pacote NIIMBOT
+  function mkPkt(cmd, data) {
+    var d = data instanceof Uint8Array ? data : new Uint8Array(data);
+    var chk = cmd ^ d.length;
+    for (var b of d) chk = (chk ^ b) & 0xFF;
+    var buf = new Uint8Array(2 + 1 + 1 + d.length + 1 + 2);
+    var p = 0;
+    buf[p++]=0x55; buf[p++]=0x55;
+    buf[p++]=cmd;  buf[p++]=d.length;
+    for (var i=0;i<d.length;i++) buf[p++]=d[i];
+    buf[p++]=chk;  buf[p++]=0xAA; buf[p++]=0xAA;
+    if (cmd === 0xC1) { // Connect: prefixar 0x03
+      var nb = new Uint8Array(buf.length+1);
+      nb[0]=0x03; nb.set(buf,1); return nb;
+    }
+    return buf;
+  }
+
+  // Fila de resposta pendente
+  var pendingCb = null;
+  channel.addEventListener('characteristicvaluechanged', function(e) {
+    if (pendingCb) { var r=pendingCb; pendingCb=null; r(new Uint8Array(e.target.value.buffer)); }
+  });
+  await channel.startNotifications();
+
+  function sleep(ms) { return new Promise(function(r){setTimeout(r,ms);}); }
+
+  function sendRaw(bytes) {
+    return channel.writeValueWithoutResponse(bytes.buffer);
+  }
+
+  function sendWait(cmd, data, timeout) {
+    return new Promise(function(resolve, reject) {
+      var t = setTimeout(function(){
+        pendingCb=null;
+        reject(new Error('Timeout cmd 0x'+cmd.toString(16).toUpperCase()));
+      }, timeout||4000);
+      pendingCb = function(resp){ clearTimeout(t); resolve(resp); };
+      sendRaw(mkPkt(cmd, data)).catch(function(e){ clearTimeout(t); pendingCb=null; reject(e); });
+    });
+  }
+
+  // countPixels: modo split (3 terços de 128px = 16 bytes cada)
+  function countPx(rb) {
+    var CHUNK=16, pts=[0,0,0];
+    for (var i=0;i<rb.length;i++) {
+      var ci=Math.min(Math.floor(i/CHUNK),2), v=rb[i];
+      for (var b=0;b<8;b++) if (v&(1<<b)) pts[ci]++;
+    }
+    return pts;
+  }
+
+  try {
+    setStatus('⚙️ Negociando com a impressora...');
+
+    // 1. Connect (0xC1)
+    await sendWait(0xC1, [0x01]);
+    await sleep(200);
+
+    // 2. SetDensity (0x21) — valor 3 = médio
+    await sendWait(0x21, [3]);
+    await sleep(50);
+
+    // 3. SetLabelType (0x23) — 1 = etiqueta comum
+    await sendWait(0x23, [1]);
+    await sleep(50);
+
+    // 4. PrintStart 7b (0x01): [hi, lo, 0,0,0,0, pageColor=1]
+    await sendWait(0x01, [0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01]);
+    await sleep(50);
+
+    // 5. PageStart (0x03)
+    await sendWait(0x03, [0x01]);
+    await sleep(50);
+
+    // 6. SetPageSize 6b (0x13): [rows_hi, rows_lo, cols_hi, cols_lo, copies_hi, copies_lo]
+    var ph = PH;
+    await sendWait(0x13, [
+      (ph>>8)&0xFF, ph&0xFF,
+      0x01, 0x80, // 384 = 0x180
+      0x00, 0x01
+    ]);
+    await sleep(50);
+
+    setStatus('🖨️ Imprimindo ' + PH + ' linhas...');
+
+    // 7. Enviar linhas bitmap
+    for (var r=0; r<rows.length; r++) {
+      var rb = rows[r];
+      var rHi=(r>>8)&0xFF, rLo=r&0xFF;
+      var blank=true;
+      for (var bi=0;bi<rb.length;bi++) if (rb[bi]!==0){blank=false;break;}
+
+      if (blank) {
+        // PrintEmptyRow (0x84): [row_hi, row_lo, repeats]
+        await sendRaw(mkPkt(0x84, [rHi, rLo, 0x01]));
+      } else {
+        // PrintBitmapRow (0x85): [row_hi, row_lo, p0, p1, p2, repeats, ...bitmap]
+        var pts = countPx(rb);
+        var payload = new Uint8Array(2+3+1+rb.length);
+        payload[0]=rHi; payload[1]=rLo;
+        payload[2]=pts[0]; payload[3]=pts[1]; payload[4]=pts[2];
+        payload[5]=0x01;
+        payload.set(rb, 6);
+        await sendRaw(mkPkt(0x85, payload));
+      }
+      await sleep(5);
+    }
+
+    // 8. PageEnd (0xE3) — aguarda até 20s enquanto impressora avança o papel
+    setStatus('⏳ Aguardando fim da impressão...');
+    await sendWait(0xE3, [0x01], 20000);
+    await sleep(300);
+
+    if (gatt) try { gatt.disconnect(); } catch(_) {}
+    setStatus('✅ Etiqueta impressa com sucesso!');
+    setBtnDisabled(false);
+    setTimeout(function(){ setStatus('', false); }, 5000);
+
+  } catch(e) {
+    if (gatt) try { gatt.disconnect(); } catch(_) {}
+    setBtnDisabled(false);
+    setStatus('❌ Erro: ' + e.message, true);
+    console.error('[BT Print]', e);
+  }
+}
+</script>
+</body>
+</html>
