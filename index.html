@@ -1517,6 +1517,9 @@ function downloadLabelPng() {
 // Protocolo: pacote [0x55 0x55 CMD LEN DATA... CHECKSUM 0xAA 0xAA]
 // Connect prefixado com 0x03. Checksum = XOR(CMD, LEN, DATA...)
 async function printViaBluetooth() {
+  // Garante que os campos da etiqueta estejam atualizados com os dados do formulário
+  updateLabel();
+
   if (!navigator.bluetooth) {
     alert('Web Bluetooth não disponível.\nUse Google Chrome (desktop ou Android).\nNão funciona em Safari, Firefox ou Edge Mobile.');
     return;
@@ -1705,14 +1708,11 @@ async function printViaBluetooth() {
         // PrintEmptyRow (0x84): [row_hi, row_lo, repeats]
         await sendRaw(mkPkt(0x84, [rHi, rLo, 0x01]));
       } else {
-        // PrintBitmapRow (0x85): [row_hi, row_lo, p0, p1, p2, repeats, ...bitmap]
-        var pts = countPx(rb);
-        var payload = new Uint8Array(2+3+1+rb.length);
-        payload[0]=rHi; payload[1]=rLo;
-        payload[2]=pts[0]; payload[3]=pts[1]; payload[4]=pts[2];
-        payload[5]=0x01;
-        payload.set(rb, 6);
-        await sendRaw(mkPkt(0x85, payload));
+        // PrintBitmapRow (0x83): [row_hi, row_lo, repeat=1, ...bitmap]
+        var payload = new Uint8Array(3 + rb.length);
+        payload[0]=rHi; payload[1]=rLo; payload[2]=0x01;
+        payload.set(rb, 3);
+        await sendRaw(mkPkt(0x83, payload));
       }
       await sleep(5);
     }
