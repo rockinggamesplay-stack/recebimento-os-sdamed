@@ -1708,11 +1708,14 @@ async function printViaBluetooth() {
         // PrintEmptyRow (0x84): [row_hi, row_lo, repeats]
         await sendRaw(mkPkt(0x84, [rHi, rLo, 0x01]));
       } else {
-        // PrintBitmapRow (0x83): [row_hi, row_lo, repeat=1, ...bitmap]
-        var payload = new Uint8Array(3 + rb.length);
-        payload[0]=rHi; payload[1]=rLo; payload[2]=0x01;
-        payload.set(rb, 3);
-        await sendRaw(mkPkt(0x83, payload));
+        // PrintBitmapRow (0x85): [row_hi, row_lo, pts0, pts1, pts2, repeat=1, ...bitmap]
+        var pts = countPx(rb);
+        var payload = new Uint8Array(6 + rb.length);
+        payload[0]=rHi; payload[1]=rLo;
+        payload[2]=pts[0]; payload[3]=pts[1]; payload[4]=pts[2];
+        payload[5]=0x01;
+        payload.set(rb, 6);
+        await sendRaw(mkPkt(0x85, payload));
       }
       await sleep(5);
     }
