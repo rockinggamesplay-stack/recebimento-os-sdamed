@@ -1687,10 +1687,12 @@ function renderLabelCanvas(ctx, PW, PH) {
   ctx.moveTo(vSep, PAD); ctx.lineTo(vSep, PH - PAD);
   ctx.stroke();
 
-  var qrCanvas = document.querySelector('#label-qr canvas');
-  if (qrCanvas) {
+  // qrcode.js 1.0.0 appenda <img> (não <canvas>) no container — buscar ambos
+  var qrEl = document.querySelector('#label-qr canvas') ||
+             document.querySelector('#label-qr img');
+  if (qrEl && (qrEl.tagName === 'CANVAS' || (qrEl.complete && qrEl.naturalWidth > 0))) {
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(qrCanvas, qrX, qrY, QR, QR);
+    ctx.drawImage(qrEl, qrX, qrY, QR, QR);
     ctx.imageSmoothingEnabled = true;
   }
 
@@ -1769,7 +1771,7 @@ async function printViaBluetooth() {
   // updateLabelTextOnly() causava etiqueta em branco porque o canvas QR pode estar inválido
   updateLabel();
   // Aguarda qrcodejs finalizar criação do canvas (img.onload é assíncrono)
-  await new Promise(function(r) { setTimeout(r, 150); });
+  await new Promise(function(r) { setTimeout(r, 500); }); // 500ms para img.onload no Android
 
   if (!navigator.bluetooth) {
     alert('Web Bluetooth não disponível.\nUse Google Chrome (desktop ou Android).\nNão funciona em Safari, Firefox ou Edge Mobile.');
