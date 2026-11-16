@@ -1579,8 +1579,8 @@ async function doSaveToDrive(btnId, noteId) {
     var yr=now.getFullYear(), monthName=MONTHS_PT[now.getMonth()];
     var dateStr=yr+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0');
     var timeStr=String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
-    var rootData=await gasCall({action:'getRootFolder',folderName:'SDAMed Recebimentos'});
-    var rootId=rootData.result.folderId;
+    
+    var rootId=DRIVE_ROOT_ID;
     var yearId=await gasFolder(String(yr),rootId);
     var monthId=await gasFolder(monthName,yearId);
     var osId=await gasFolder('OS-'+osNum,monthId);
