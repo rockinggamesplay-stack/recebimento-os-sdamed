@@ -1366,7 +1366,7 @@ async function gasCall(payload) {
 
 async function gasFolder(name, parentId) {
   var d = await gasCall({action: 'getOrCreateFolder', folderName: name, parentId: parentId});
-  return d.folderId;
+  return d.result.folderId;
 }
 
 async function gasUploadB64(name, b64, mime, folderId) {
@@ -1383,7 +1383,9 @@ async function doSaveToDrive() {
     var yr=now.getFullYear(), monthName=MONTHS_PT[now.getMonth()];
     var dateStr=yr+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0');
     var timeStr=String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
-    var yearId=await gasFolder(String(yr),DRIVE_ROOT_ID);
+    var rootData=await gasCall({action:'getRootFolder',folderName:'SDAMed Recebimentos'});
+    var rootId=rootData.result.folderId;
+    var yearId=await gasFolder(String(yr),rootId);
     var monthId=await gasFolder(monthName,yearId);
     var osId=await gasFolder('OS-'+osNum,monthId);
     var recId=await gasFolder('recebimento',osId);
