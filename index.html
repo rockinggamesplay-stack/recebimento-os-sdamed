@@ -1057,7 +1057,7 @@ var camType = null;
 var pendingCapture = null;
 var camPhotoCount = 0;
 // Drive config via Apps Script Web App (sem OAuth)
-var APPS_SCRIPT_URL = 'https://script.google.com/a/macros/sdamed.com/s/AKfycbzhs5IdjM2gx-HTr7wn0QhZdriBL0hw98UZdSQfBiWE_Q9fL6Oqdtg0Rpja3oYAHOud/exec';
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzhs5IdjM2gx-HTr7wn0QhZdriBL0hw98UZdSQfBiWE_Q9fL6Oqdtg0Rpja3oYAHOud/exec';
 var DRIVE_ROOT_ID   = '1WkvNlA_TFkrloSZStoPdVraoewQAXq-q';
 var DRIVE_2026_ID   = '1zS-9lsVY5Gdt5ueGWkBNg73yQAu1EBTq';
 var MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -1416,8 +1416,23 @@ async function doSaveToDrive() {
       var vTs=vNow.getFullYear()+String(vNow.getMonth()+1).padStart(2,'0')+String(vNow.getDate()).padStart(2,'0')+'_'+String(vNow.getHours()).padStart(2,'0')+String(vNow.getMinutes()).padStart(2,'0')+String(vNow.getSeconds()+i).padStart(2,'0');
       await gasUploadB64('ordem de servico '+vTs+' - SDAMed.mp4', vB64, 'video/webm', recId);
     }
+    // Etiqueta PNG alta resolução (2x = 768×460px para 50×30mm)
+    note.textContent='Salvando etiqueta PNG...';
+    updateLabel();
+    await new Promise(function(r){setTimeout(r,200);});
+    var LSCALE=2;
+    var LPW=384*LSCALE, LPH=(labelSizeMm===30?230:307)*LSCALE;
+    var lCv=document.createElement('canvas');
+    lCv.width=LPW; lCv.height=LPH;
+    var lCt=lCv.getContext('2d');
+    lCt.scale(LSCALE,LSCALE);
+    renderLabelCanvas(lCt,384,labelSizeMm===30?230:307);
+    var lId=lCt.getImageData(0,0,LPW,LPH); var lp=lId.data;
+    for(var li=0;li<lp.length;li+=4){var lg=0.299*lp[li]+0.587*lp[li+1]+0.114*lp[li+2];var lv=lg<180?0:255;lp[li]=lp[li+1]=lp[li+2]=lv;lp[li+3]=255;}
+    lCt.putImageData(lId,0,0);
+    await gasUploadB64('etiqueta_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.png',lCv.toDataURL('image/png').split(',')[1],'image/png',recId);
     btn.textContent='✅ Salvo!'; btn.style.background='#2e7d32';
-    note.textContent='✓ '+state.fotos.length+' foto(s) + '+state.videos.length+' vídeo(s) → '+monthName+'/OS-'+osNum;
+    note.textContent='✓ '+state.fotos.length+' foto(s) + '+state.videos.length+' vídeo(s) + etiqueta PNG → '+monthName+'/OS-'+osNum;
     setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';btn.disabled=false;},4000);
   } catch(e) {
     btn.textContent='❌ Erro'; btn.disabled=false;
