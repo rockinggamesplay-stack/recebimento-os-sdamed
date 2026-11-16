@@ -1856,13 +1856,16 @@ async function printViaBluetooth() {
         if (gatt) gatt.disconnect();
       }
     }
-    // UUIDs fixos do Niimbot B1: write e notify são características separadas
-    var NIIM_SVC   = 'e7810a71-73ae-499d-8c15-faa9aef0c3f2';
-    var NIIM_WRITE = '69400002-b5a3-f393-e0a9-e50e24dcca9e';
-    var NIIM_NOTIF = '69400003-b5a3-f393-e0a9-e50e24dcca9e';
+    // Busca dinamica: escaneia todas as chars do servico Niimbot por propriedade
+    var NIIM_SVC = 'e7810a71-73ae-499d-8c15-faa9aef0c3f2';
     var btSvc = await gatt.getPrimaryService(NIIM_SVC);
-    channel = await btSvc.getCharacteristic(NIIM_WRITE);
-    var notifyChannel = await btSvc.getCharacteristic(NIIM_NOTIF);
+    var allChars = await btSvc.getCharacteristics();
+    // Char de escrita: writeWithoutResponse ou write (qualquer firmware)
+    channel = allChars.find(function(c) { return c.properties.writeWithoutResponse || c.properties.write; });
+    // Char de notificacao: notify
+    var notifyChannel = allChars.find(function(c) { return c.properties.notify; });
+    if (!channel) throw new Error('Char de escrita nao encontrada. Chars: ' + allChars.map(function(c){return c.uuid}).join(', '));
+    if (!notifyChannel) notifyChannel = channel; // fallback
   } catch(e) {
     if (gatt) try { gatt.disconnect(); } catch(_) {}
     setBtnDisabled(false);
