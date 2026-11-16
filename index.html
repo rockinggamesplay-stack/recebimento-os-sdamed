@@ -1781,6 +1781,9 @@ async function printViaBluetooth() {
   var canvas = document.createElement('canvas');
   canvas.width = PW; canvas.height = PH;
   var ctx = canvas.getContext('2d');
+  // Preenche fundo branco — sem isso, pixels transparentes (RGB=0,0,0) seriam tratados como preto
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, PW, PH);
   renderLabelCanvas(ctx, PW, PH);
 
   // Converter pixels do canvas para linhas 1-bit (48 bytes = 384px por linha)
