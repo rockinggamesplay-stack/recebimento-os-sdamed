@@ -1629,12 +1629,26 @@ async function doSaveToDrive(btnId, noteId) {
     await gasUploadB64('etiqueta_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.png',lCv.toDataURL('image/png').split(',')[1],'image/png',recId);
     btn.textContent='✅ Salvo!'; btn.style.background='#2e7d32';
     note.textContent='✓ '+state.fotos.length+' foto(s) + '+state.videos.length+' vídeo(s) + etiqueta PNG → '+monthName+'/OS-'+osNum;
-    setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';btn.disabled=false;},4000);
+    setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';btn.disabled=false;resetForm();},4000);
   } catch(e) {
     btn.textContent='❌ Erro'; btn.disabled=false;
     note.textContent='Erro: '+e.message;
     setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';},3000);
   }
+}
+
+function resetForm() {
+  state.fotos = [];
+  state.videos = [];
+  renderGrid('fotos');
+  renderGrid('videos');
+  ['f-os','f-remetente','f-transportadora','eq1-modelo','eq1-serie','eq1-lote',
+   'eq2-modelo','eq2-serie','eq2-lote','f-embalagem','f-conforme','f-obs'].forEach(function(id){
+    var el=document.getElementById(id); if(el){el.value='';}
+  });
+  var driveNote2 = document.getElementById('drive-note-2');
+  if(driveNote2) driveNote2.textContent='Salva fotos, vídeos e resumo na pasta da OS no Drive';
+  switchTab('videos');
 }
 
 // ── Init ────────────────────────────────────────────────────────────────────
