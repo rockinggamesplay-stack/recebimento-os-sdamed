@@ -235,6 +235,39 @@ body {
 }
 .btn-drive-note { font-size: 11px; color: var(--muted); text-align: center; margin-top: 6px; }
 
+/* ── Resumo tab ── */
+.resumo-check-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 10px;
+  margin-bottom: 8px; font-size: 14px;
+  background: var(--white);
+}
+.resumo-check-item.ok  { border-left: 4px solid var(--green); }
+.resumo-check-item.miss { border-left: 4px solid var(--red);  }
+.resumo-data-block {
+  background: var(--white); border-radius: 10px;
+  padding: 14px; margin-bottom: 10px;
+}
+.resumo-data-row {
+  display: flex; gap: 8px; padding: 5px 0;
+  border-bottom: 1px solid var(--gray1);
+}
+.resumo-data-row:last-child { border-bottom: none; padding-bottom: 0; }
+.resumo-data-row:first-child { padding-top: 0; }
+.resumo-data-label { font-size: 11px; color: var(--muted); font-weight: 600; min-width: 115px; padding-top: 1px; }
+.resumo-data-value { font-size: 14px; font-weight: 500; flex: 1; word-break: break-word; }
+.resumo-media-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.resumo-media-box {
+  flex: 1; background: var(--white); border-radius: 10px;
+  padding: 14px 10px; text-align: center;
+}
+.resumo-media-num  { font-size: 28px; font-weight: 900; color: var(--red); line-height: 1; }
+.resumo-media-lbl  { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.resumo-thumbs { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.resumo-thumb  { width: 34px; height: 34px; border-radius: 4px; object-fit: cover; border: 1px solid var(--gray2); }
+.resumo-thumb-vid { width: 34px; height: 34px; border-radius: 4px; background: var(--black); display: flex; align-items: center; justify-content: center; font-size: 15px; }
+.resumo-warn { background: #FFF3E0; border-left: 4px solid #E65100; border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #E65100; margin-bottom: 14px; }
+
 /* ── Print styles ── */
 @media print {
   body > *:not(#print-only-label) { display: none !important; }
@@ -457,6 +490,9 @@ body {
   <div class="tab" onclick="switchTab('etiqueta')">
     <span class="tab-icon">🏷️</span>Etiqueta
   </div>
+  <div class="tab" onclick="switchTab('resumo')">
+    <span class="tab-icon">✅</span>Resumo
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════ VÍDEOS ═══ -->
@@ -610,6 +646,13 @@ body {
 
 </div>
 
+<!-- ═══════════════════════════════════════════ RESUMO ═══ -->
+<div id="tab-resumo" class="tab-panel">
+  <div id="resumo-content"></div>
+  <button class="btn-drive-active" id="btn-save-drive-2" onclick="saveToDrive2()" style="margin-top:4px;">☁️ Salvar no Drive</button>
+  <div class="btn-drive-note" id="drive-note-2">Salva fotos, vídeos e resumo na pasta da OS no Drive</div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 var state = {
@@ -625,9 +668,10 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
   document.getElementById('tab-' + name).classList.add('active');
   var tabs = document.querySelectorAll('.tab');
-  var map = {videos:0, fotos:1, dados:2, etiqueta:3};
+  var map = {videos:0, fotos:1, dados:2, etiqueta:3, resumo:4};
   tabs[map[name]].classList.add('active');
   if (name === 'etiqueta') updateLabel();
+  if (name === 'resumo')   updateResumo();
 }
 
 // ── Header OS number ───────────────────────────────────────────────────────
@@ -1339,10 +1383,161 @@ function showThumbPreview(type, idx) {
 }
 
 // ── Google Drive via Apps Script ─────────────────────────────────────────────
+// ── Resumo / Finalizar ─────────────────────────────────────────────────────
+function updateResumo() {
+  var g = function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
+  var os   = g('f-os');
+  var rem  = g('f-remetente');
+  var tra  = g('f-transportadora');
+  var emb  = g('f-embalagem');
+  var conf = g('f-conforme');
+  var obs  = g('f-obs');
+  var eq1m = g('eq1-modelo');
+  var nFotos  = state.fotos.length;
+  var nVideos = state.videos.length;
+
+  // Checklist items
+  var checks = [
+    { label: 'Número da OS',      ok: !!os   },
+    { label: 'Remetente',         ok: !!rem  },
+    { label: 'Transportadora',    ok: !!tra  },
+    { label: 'Equipamento 1',     ok: !!eq1m },
+    { label: 'Condição embalagem',ok: !!emb  },
+    { label: 'Conforme OS?',      ok: !!conf },
+    { label: 'Fotos registradas', ok: nFotos > 0  },
+    { label: 'Vídeos registrados',ok: nVideos > 0 },
+  ];
+  var missing = checks.filter(function(c){ return !c.ok; });
+
+  // Build equipamentos list
+  var equips = [];
+  for (var i=1; i<=equipCount; i++) {
+    var em = g('eq'+i+'-modelo');
+    var es = g('eq'+i+'-serie');
+    var el = g('eq'+i+'-lote');
+    if (em || es || el) {
+      var txt = em || '—';
+      if (es) txt += ' · SN: '+es;
+      if (el) txt += ' · Lote: '+el;
+      equips.push(txt);
+    }
+  }
+
+  // Build acessórios list
+  var acess = [];
+  var cbSem = document.getElementById('cb-sem-acess');
+  if (!cbSem || !cbSem.checked) {
+    for (var j=1; j<=acessCount; j++) {
+      var an = g('ac'+j+'-nome');
+      var aq = g('ac'+j+'-qtd');
+      var ao = g('ac'+j+'-obs');
+      if (an) { var at = aq ? aq+'× '+an : an; if (ao) at += ' ('+ao+')'; acess.push(at); }
+    }
+  }
+  if (acess.length === 0) acess.push('Sem acessórios');
+
+  // Thumbnails fotos
+  var thumbsHtml = '';
+  if (nFotos > 0) {
+    var maxT = Math.min(nFotos, 8);
+    for (var ti=0; ti<maxT; ti++) {
+      thumbsHtml += '<img class="resumo-thumb" src="'+state.fotos[ti].dataUrl+'">';
+    }
+    if (nFotos > 8) thumbsHtml += '<div class="resumo-thumb-vid" style="font-size:11px;color:#fff;background:var(--muted);">+'+( nFotos-8)+'</div>';
+  }
+  // Thumbs vídeos
+  var thumbsVidHtml = '';
+  if (nVideos > 0) {
+    var maxV = Math.min(nVideos, 4);
+    for (var vi=0; vi<maxV; vi++) thumbsVidHtml += '<div class="resumo-thumb-vid">🎬</div>';
+    if (nVideos > 4) thumbsVidHtml += '<div class="resumo-thumb-vid" style="font-size:11px;color:#fff;background:var(--muted);">+'+( nVideos-4)+'</div>';
+  }
+
+  var html = '';
+
+  // Warn if missing required
+  if (missing.length > 0) {
+    html += '<div class="resumo-warn">⚠️ Itens pendentes: '
+      + missing.map(function(c){return c.label;}).join(', ')
+      + '</div>';
+  }
+
+  // Checklist
+  html += '<div class="section-title">CHECKLIST</div>';
+  checks.forEach(function(c) {
+    html += '<div class="resumo-check-item '+(c.ok?'ok':'miss')+'">'
+          + '<span>'+(c.ok?'✅':'❌')+'</span>'
+          + '<span>'+c.label+'</span>'
+          + '</div>';
+  });
+
+  // Mídias
+  html += '<div class="section-title" style="margin-top:20px;">MÍDIAS</div>';
+  html += '<div class="resumo-media-row">'
+    + '<div class="resumo-media-box"><div class="resumo-media-num">'+nFotos+'</div><div class="resumo-media-lbl">📷 Fotos</div>'
+    + (thumbsHtml ? '<div class="resumo-thumbs">'+thumbsHtml+'</div>' : '')
+    + '</div>'
+    + '<div class="resumo-media-box"><div class="resumo-media-num">'+nVideos+'</div><div class="resumo-media-lbl">🎬 Vídeos</div>'
+    + (thumbsVidHtml ? '<div class="resumo-thumbs">'+thumbsVidHtml+'</div>' : '')
+    + '</div>'
+    + '</div>';
+
+  // Dados
+  html += '<div class="section-title">DADOS DO RECEBIMENTO</div>';
+  html += '<div class="resumo-data-block">';
+  var rows = [
+    ['OS', os || '—'],
+    ['Remetente', rem || '—'],
+    ['Transportadora', tra || '—'],
+    ['Embalagem', emb || '—'],
+    ['Conforme OS?', conf || '—'],
+  ];
+  rows.forEach(function(r){
+    html += '<div class="resumo-data-row">'
+          + '<div class="resumo-data-label">'+r[0]+'</div>'
+          + '<div class="resumo-data-value">'+r[1]+'</div>'
+          + '</div>';
+  });
+  html += '</div>';
+
+  // Equipamentos
+  html += '<div class="section-title">EQUIPAMENTOS</div>';
+  html += '<div class="resumo-data-block">';
+  equips.forEach(function(eq, idx) {
+    html += '<div class="resumo-data-row">'
+          + '<div class="resumo-data-label">Equip '+(idx+1)+'</div>'
+          + '<div class="resumo-data-value">'+eq+'</div>'
+          + '</div>';
+  });
+  if (equips.length === 0) html += '<div class="resumo-data-row"><div class="resumo-data-value" style="color:var(--muted)">Nenhum equipamento informado</div></div>';
+  html += '</div>';
+
+  // Acessórios
+  html += '<div class="section-title">ACESSÓRIOS</div>';
+  html += '<div class="resumo-data-block">';
+  acess.forEach(function(a) {
+    html += '<div class="resumo-data-row"><div class="resumo-data-value">'+a+'</div></div>';
+  });
+  html += '</div>';
+
+  // Obs
+  if (obs) {
+    html += '<div class="section-title">OBSERVAÇÕES</div>';
+    html += '<div class="resumo-data-block"><div class="resumo-data-row"><div class="resumo-data-value">'+obs+'</div></div></div>';
+  }
+
+  document.getElementById('resumo-content').innerHTML = html;
+}
+
 function saveToDrive() {
   var osNum = document.getElementById('f-os').value.trim();
   if (!osNum) { alert('Preencha o número da OS antes de salvar no Drive.'); return; }
-  doSaveToDrive();
+  doSaveToDrive('btn-save-drive','drive-note');
+}
+function saveToDrive2() {
+  var osNum = document.getElementById('f-os').value.trim();
+  if (!osNum) { alert('Preencha o número da OS antes de salvar no Drive.'); return; }
+  doSaveToDrive('btn-save-drive-2','drive-note-2');
 }
 
 function arrToB64(arr) {
@@ -1373,8 +1568,9 @@ async function gasUploadB64(name, b64, mime, folderId) {
   return gasCall({action: 'upload', folderId: folderId, fileName: name, mimeType: mime, base64: b64});
 }
 
-async function doSaveToDrive() {
-  var btn=document.getElementById('btn-save-drive'), note=document.getElementById('drive-note');
+async function doSaveToDrive(btnId, noteId) {
+  btnId = btnId || 'btn-save-drive'; noteId = noteId || 'drive-note';
+  var btn=document.getElementById(btnId), note=document.getElementById(noteId);
   var osNum=document.getElementById('f-os').value.trim();
   btn.textContent='⏳ Salvando...'; btn.disabled=true;
   note.textContent='Criando pastas no Drive...';
