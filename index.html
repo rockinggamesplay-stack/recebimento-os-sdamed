@@ -1851,17 +1851,13 @@ async function printViaBluetooth() {
         if (gatt) gatt.disconnect();
       }
     }
-    var services = await gatt.getPrimaryServices();
-    for (var svc of services) {
-      var chars = await svc.getCharacteristics();
-      for (var c of chars) {
-        if (c.properties.notify && c.properties.writeWithoutResponse) {
-          channel = c; break;
-        }
-      }
-      if (channel) break;
-    }
-    if (!channel) throw new Error('Característica de comunicação não encontrada');
+    // UUIDs fixos do Niimbot B1: write e notify são características separadas
+    var NIIM_SVC   = 'e7810a71-73ae-499d-8c15-faa9aef0c3f2';
+    var NIIM_WRITE = '69400002-b5a3-f393-e0a9-e50e24dcca9e';
+    var NIIM_NOTIF = '69400003-b5a3-f393-e0a9-e50e24dcca9e';
+    var btSvc = await gatt.getPrimaryService(NIIM_SVC);
+    channel = await btSvc.getCharacteristic(NIIM_WRITE);
+    var notifyChannel = await btSvc.getCharacteristic(NIIM_NOTIF);
   } catch(e) {
     if (gatt) try { gatt.disconnect(); } catch(_) {}
     setBtnDisabled(false);
@@ -1889,10 +1885,10 @@ async function printViaBluetooth() {
 
   // Fila de resposta pendente
   var pendingCb = null;
-  channel.addEventListener('characteristicvaluechanged', function(e) {
+  notifyChannel.addEventListener('characteristicvaluechanged', function(e) {
     if (pendingCb) { var r=pendingCb; pendingCb=null; r(new Uint8Array(e.target.value.buffer)); }
   });
-  await channel.startNotifications();
+  await notifyChannel.startNotifications();
 
   function sleep(ms) { return new Promise(function(r){setTimeout(r,ms);}); }
 
