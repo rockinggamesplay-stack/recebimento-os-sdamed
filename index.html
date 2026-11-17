@@ -702,7 +702,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '2.5';
+var APP_VERSION = '2.6';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -1668,10 +1668,12 @@ function saveToDrive2() {
 }
 
 function arrToB64(arr) {
-  var binary = '';
-  var len = arr.length;
-  for (var i = 0; i < len; i++) binary += String.fromCharCode(arr[i]);
-  return btoa(binary);
+  // Converte em blocos (rápido e sem estourar memória no celular)
+  var parts = [], STEP = 0x8000;
+  for (var i = 0; i < arr.length; i += STEP) {
+    parts.push(String.fromCharCode.apply(null, arr.subarray(i, i + STEP)));
+  }
+  return btoa(parts.join(''));
 }
 
 async function gasCall(payload) {
@@ -1815,12 +1817,65 @@ function copyResumoTxt() {
   } catch(_) { fallback(); }
 }
 
+// ── Envio de arquivos grandes (vídeos) em partes de 8 MB — evita "Failed to fetch" ──
+var UPLOAD_CHUNK = 8 * 1024 * 1024; // múltiplo de 256 KB (exigência do Google Drive)
+async function blobToB64(blob) {
+  return arrToB64(new Uint8Array(await blob.arrayBuffer()));
+}
+async function gasUploadGrande(name, blob, mime, folderId, onProg) {
+  var st = await gasCall({action: 'uploadStart', folderId: folderId, fileName: name, mimeType: mime, size: blob.size});
+  var url = st.result.uploadUrl;
+  if (!url) throw new Error('Drive não abriu o envio em partes');
+  var start = 0;
+  while (start < blob.size) {
+    var end = Math.min(start + UPLOAD_CHUNK, blob.size);
+    var b64 = await blobToB64(blob.slice(start, end));
+    var r = null, tries = 0;
+    while (true) {
+      try {
+        r = await gasCall({action: 'uploadChunk', uploadUrl: url, base64: b64, start: start, total: blob.size, mimeType: mime});
+        break;
+      } catch (e) {
+        if (++tries >= 3) throw e;
+        await new Promise(function(res) { setTimeout(res, 2000 * tries); });
+      }
+    }
+    if (r.result.done) { if (onProg) onProg(1); return r.result; }
+    start = (typeof r.result.next === 'number') ? r.result.next : end;
+    if (onProg) onProg(start / blob.size);
+  }
+  return {};
+}
+// Envia um vídeo: em partes; se o servidor ainda não tiver essa função, tenta do jeito antigo
+async function enviarVideo(name, blob, mime, folderId, onProg) {
+  try {
+    return await gasUploadGrande(name, blob, mime, folderId, onProg);
+  } catch (e) {
+    if (String(e.message || e).indexOf('Acao desconhecida') >= 0) {
+      return await gasUploadB64(name, await blobToB64(blob), mime, folderId);
+    }
+    throw e;
+  }
+}
+// Se um vídeo não subir, oferece salvar uma cópia no celular (nada se perde)
+function baixarVideosPendentes() {
+  state.videos.forEach(function(v, i) {
+    if (v.enviado) return;
+    var a = document.createElement('a');
+    a.href = v.url;
+    a.download = v.name || ('video_OS_' + (i + 1) + '.mp4');
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+}
+
 async function doSaveToDrive(btnId, noteId) {
   btnId = btnId || 'btn-save-drive'; noteId = noteId || 'drive-note';
   var btn=document.getElementById(btnId), note=document.getElementById(noteId);
   var osNum=document.getElementById('f-os').value.trim();
   btn.textContent='⏳ Salvando...'; btn.disabled=true;
   note.textContent='Criando pastas no Drive...';
+  // state.salvo guarda o que já subiu: se tentar de novo, não duplica fotos/resumo
+  var sv = state.salvo || (state.salvo = {});
   try {
     var now=new Date();
     var yr=now.getFullYear(), monthName=MONTHS_PT[now.getMonth()];
@@ -1830,72 +1885,110 @@ async function doSaveToDrive(btnId, noteId) {
     if(semOS) osNum=refSemOS()||('SEM IDENTIFICACAO '+dateStr+'-'+timeStr);
     var osFolderName=semOS?'OS - '+osNum:'OS-'+osNum;
 
-    var rootId=DRIVE_ROOT_ID;
-    var yearId=await gasFolder(String(yr),rootId);
-    var monthId=await gasFolder(monthName,yearId);
-    var osId=await gasFolder(osFolderName,monthId);
-    var recId=await gasFolder('recebimento',osId);
+    var recId = (sv.folderName === osFolderName && sv.recId) ? sv.recId : null;
+    if (!recId) {
+      var rootId=DRIVE_ROOT_ID;
+      var yearId=await gasFolder(String(yr),rootId);
+      var monthId=await gasFolder(monthName,yearId);
+      var osId=await gasFolder(osFolderName,monthId);
+      recId=await gasFolder('recebimento',osId);
+      state.salvo = sv = { folderName: osFolderName, recId: recId, monthName: monthName };
+    }
     // Summary
     var registro=coletarRegistro(now);
     registro.referencia=osFolderName;
-    var txt=montarResumoTxt(registro);
-    note.textContent='Salvando resumo...';
-    var txtB64 = btoa(unescape(encodeURIComponent(txt)));
-    await gasUploadB64('recebimento_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.txt', txtB64, 'text/plain', recId);
+    if (!sv.txt) {
+      var txt=montarResumoTxt(registro);
+      note.textContent='Salvando resumo...';
+      var txtB64 = btoa(unescape(encodeURIComponent(txt)));
+      await gasUploadB64('recebimento_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.txt', txtB64, 'text/plain', recId);
+      sv.txt = true;
+    }
     // Photos
     for(var i=0;i<state.fotos.length;i++){
-      note.textContent='Enviando foto '+(i+1)+' de '+state.fotos.length+'...';
       var fo=state.fotos[i];
+      if (fo.enviado) continue;
+      note.textContent='Enviando foto '+(i+1)+' de '+state.fotos.length+'...';
       var b64=fo.dataUrl.split(',')[1];
       var pNow=new Date();
       var pTs=pNow.getFullYear()+String(pNow.getMonth()+1).padStart(2,'0')+String(pNow.getDate()).padStart(2,'0')+'_'+String(pNow.getHours()).padStart(2,'0')+String(pNow.getMinutes()).padStart(2,'0')+String(pNow.getSeconds()+i).padStart(2,'0');
       await gasUploadB64('ordem de servico '+pTs+' - SDAMed.jpg', b64, 'image/jpeg', recId);
+      fo.enviado = true;
     }
-    // Videos
+    // Videos — um vídeo com problema não impede o resto de salvar
+    var falhasVideo = [];
     for(var i=0;i<state.videos.length;i++){
-      note.textContent='Enviando vídeo '+(i+1)+' de '+state.videos.length+'...';
       var vi=state.videos[i];
-      var vBlob=await (await fetch(vi.url)).blob();
-      var vMime=(vBlob.type||'video/webm').split(';')[0];
-      var vExt=vMime.indexOf('mp4')>=0?'.mp4':(vMime.indexOf('quicktime')>=0?'.mov':'.webm');
-      var vBuf=await vBlob.arrayBuffer();
-      var vB64=arrToB64(new Uint8Array(vBuf));
-      var vNow=new Date();
-      var vTs=vNow.getFullYear()+String(vNow.getMonth()+1).padStart(2,'0')+String(vNow.getDate()).padStart(2,'0')+'_'+String(vNow.getHours()).padStart(2,'0')+String(vNow.getMinutes()).padStart(2,'0')+String(vNow.getSeconds()+i).padStart(2,'0');
-      await gasUploadB64('ordem de servico '+vTs+' - SDAMed'+vExt, vB64, vMime, recId);
+      if (vi.enviado) continue;
+      try {
+        var vBlob=await (await fetch(vi.url)).blob();
+        var vMime=(vBlob.type||'video/webm').split(';')[0];
+        var vExt=vMime.indexOf('mp4')>=0?'.mp4':(vMime.indexOf('quicktime')>=0?'.mov':'.webm');
+        var vMB=(vBlob.size/1048576).toFixed(1);
+        var vNow=new Date();
+        var vTs=vNow.getFullYear()+String(vNow.getMonth()+1).padStart(2,'0')+String(vNow.getDate()).padStart(2,'0')+'_'+String(vNow.getHours()).padStart(2,'0')+String(vNow.getMinutes()).padStart(2,'0')+String(vNow.getSeconds()+i).padStart(2,'0');
+        (function(idx, mb){
+          note.textContent='Enviando vídeo '+(idx+1)+' de '+state.videos.length+' ('+mb+' MB)...';
+        })(i, vMB);
+        await enviarVideo('ordem de servico '+vTs+' - SDAMed'+vExt, vBlob, vMime, recId, (function(idx, mb){
+          return function(p){ note.textContent='Enviando vídeo '+(idx+1)+' de '+state.videos.length+' ('+mb+' MB) — '+Math.round(p*100)+'%'; };
+        })(i, vMB));
+        vi.enviado = true;
+      } catch(ve) {
+        console.error('[video]', ve);
+        falhasVideo.push((i+1) + ' (' + (ve.message || ve) + ')');
+      }
     }
     // Etiqueta PNG alta resolução (2x = 768×460px para 50×30mm)
-    note.textContent='Salvando etiqueta PNG...';
-    updateLabel();
-    await new Promise(function(r){setTimeout(r,200);});
-    var LSCALE=2;
-    var LPW=384*LSCALE, LPH=(labelSizeMm===30?230:307)*LSCALE;
-    var lCv=document.createElement('canvas');
-    lCv.width=LPW; lCv.height=LPH;
-    var lCt=lCv.getContext('2d');
-    lCt.scale(LSCALE,LSCALE);
-    renderLabelCanvas(lCt,384,labelSizeMm===30?230:307);
-    var lId=lCt.getImageData(0,0,LPW,LPH); var lp=lId.data;
-    for(var li=0;li<lp.length;li+=4){var lg=0.299*lp[li]+0.587*lp[li+1]+0.114*lp[li+2];var lv=lg<180?0:255;lp[li]=lp[li+1]=lp[li+2]=lv;lp[li+3]=255;}
-    lCt.putImageData(lId,0,0);
-    await gasUploadB64('etiqueta_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.png',lCv.toDataURL('image/png').split(',')[1],'image/png',recId);
+    if (!sv.etiqueta) {
+      try {
+        note.textContent='Salvando etiqueta PNG...';
+        updateLabel();
+        await new Promise(function(r){setTimeout(r,200);});
+        var LSCALE=2;
+        var LPW=384*LSCALE, LPH=(labelSizeMm===30?230:307)*LSCALE;
+        var lCv=document.createElement('canvas');
+        lCv.width=LPW; lCv.height=LPH;
+        var lCt=lCv.getContext('2d');
+        lCt.scale(LSCALE,LSCALE);
+        renderLabelCanvas(lCt,384,labelSizeMm===30?230:307);
+        var lId=lCt.getImageData(0,0,LPW,LPH); var lp=lId.data;
+        for(var li=0;li<lp.length;li+=4){var lg=0.299*lp[li]+0.587*lp[li+1]+0.114*lp[li+2];var lv=lg<180?0:255;lp[li]=lp[li+1]=lp[li+2]=lv;lp[li+3]=255;}
+        lCt.putImageData(lId,0,0);
+        await gasUploadB64('etiqueta_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.png',lCv.toDataURL('image/png').split(',')[1],'image/png',recId);
+        sv.etiqueta = true;
+      } catch(le) { console.warn('[etiqueta] não salva:', le); }
+    }
     // Ficha de dados (.json) para a planilha de controle — se falhar, não bloqueia
-    try {
-      note.textContent='Salvando ficha de dados...';
-      var fichaB64=btoa(unescape(encodeURIComponent(JSON.stringify(registro,null,2))));
-      await gasUploadB64('registro_'+registro.id+'_OS-'+osNum+'.json',fichaB64,'application/json',recId);
-    } catch(fe) { console.warn('[ficha] não salva:', fe); }
+    if (!sv.ficha) {
+      try {
+        note.textContent='Salvando ficha de dados...';
+        registro.videosPendentes = falhasVideo.length;
+        var fichaB64=btoa(unescape(encodeURIComponent(JSON.stringify(registro,null,2))));
+        await gasUploadB64('registro_'+registro.id+'_OS-'+osNum+'.json',fichaB64,'application/json',recId);
+        sv.ficha = true;
+      } catch(fe) { console.warn('[ficha] não salva:', fe); }
+    }
+    if (falhasVideo.length) {
+      btn.textContent='⚠️ Vídeo pendente — tocar para tentar de novo'; btn.style.background='#e65100'; btn.disabled=false;
+      note.innerHTML='Dados e fotos salvos em '+monthName+'/'+osFolderName+'. Vídeo(s) que não subiram: '+falhasVideo.join(', ')+
+        '.<br>Não feche o app. Toque no botão acima para tentar de novo (não duplica o que já subiu) ou '+
+        '<a href="#" onclick="baixarVideosPendentes();return false;" style="color:#c00;font-weight:700;">salve o vídeo no celular</a>.';
+      return;
+    }
     btn.textContent='✅ Salvo!'; btn.style.background='#2e7d32';
     note.textContent='✓ '+state.fotos.length+' foto(s) + '+state.videos.length+' vídeo(s) + etiqueta PNG → '+monthName+'/'+osFolderName;
     setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';btn.disabled=false;resetForm();},4000);
   } catch(e) {
-    btn.textContent='❌ Erro'; btn.disabled=false;
-    note.textContent='Erro: '+e.message;
-    setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';},3000);
+    btn.textContent='❌ Erro — tocar para tentar de novo'; btn.disabled=false;
+    note.textContent='Erro: '+e.message+' — o que já subiu não será enviado de novo.';
+    setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';},6000);
   }
 }
 
+
 function resetForm() {
+  state.salvo = null;
   state.fotos = [];
   state.videos = [];
   renderGrid('fotos');
