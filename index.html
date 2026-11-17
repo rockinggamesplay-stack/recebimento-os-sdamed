@@ -544,8 +544,46 @@ body {
     <input type="text" id="f-remetente" placeholder="Nome completo do remetente">
   </div>
   <div class="field">
-    <label>Transportadora <span class="req">*</span></label>
+    <label>Recebido por</label>
+    <select id="f-recebedor" onchange="try{localStorage.setItem('recebedor',this.value)}catch(_){}">
+      <option value="">Selecione...</option>
+      <option value="William">William</option>
+      <option value="Tainara">Tainara</option>
+      <option value="Thamires">Thamires</option>
+      <option value="Aline P.">Aline P.</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Forma de chegada</label>
+    <select id="f-chegada" onchange="onChegadaChange()">
+      <option value="">Selecione...</option>
+      <option value="Correios">Correios</option>
+      <option value="Transportadora">Transportadora</option>
+      <option value="Cliente entregou">Cliente entregou</option>
+      <option value="Outro">Outro</option>
+    </select>
+  </div>
+  <div class="field" id="fld-rastreio" style="display:none;">
+    <label>Código de rastreio (opcional)</label>
+    <input type="text" id="f-rastreio" placeholder="Ex: AB123456789BR" autocapitalize="characters">
+  </div>
+  <div class="field" id="fld-transportadora">
+    <label id="lbl-transportadora">Transportadora <span class="req">*</span></label>
     <input type="text" id="f-transportadora" placeholder="Ex: Correios, Jadlog, Transportadora...">
+  </div>
+  <div id="fld-transp-extra" style="display:none;">
+    <div class="field">
+      <label>NF / CT-e (opcional)</label>
+      <input type="text" id="f-nf" placeholder="Número da nota ou do CT-e">
+    </div>
+    <div class="field">
+      <label>Volumes (opcional)</label>
+      <input type="number" id="f-volumes" placeholder="Ex: 1" inputmode="numeric" min="1" style="max-width:120px;">
+    </div>
+    <div class="field">
+      <label>Peso (opcional)</label>
+      <input type="text" id="f-peso" placeholder="Ex: 12 kg">
+    </div>
   </div>
 
   <div class="section-title">EQUIPAMENTOS</div>
@@ -610,6 +648,15 @@ body {
     </select>
   </div>
   <div class="field">
+    <label>Garantia</label>
+    <select id="f-garantia">
+      <option value="">Selecione...</option>
+      <option value="Em garantia">Em garantia</option>
+      <option value="Fora da garantia">Fora da garantia</option>
+      <option value="A verificar">A verificar</option>
+    </select>
+  </div>
+  <div class="field">
     <label>Observações gerais</label>
     <textarea id="f-obs" placeholder="(opcional)"></textarea>
   </div>
@@ -650,11 +697,12 @@ body {
   <div id="resumo-content"></div>
   <button class="btn-drive-active" id="btn-save-drive-2" onclick="saveToDrive2()" style="margin-top:4px;">☁️ Salvar no Drive</button>
   <div class="btn-drive-note" id="drive-note-2">Salva fotos, vídeos e resumo na pasta da OS no Drive</div>
+  <button class="btn-download-png" id="btn-copy-resumo" onclick="copyResumoTxt()" style="margin-top:10px;">📋 Copiar resumo (para colar na OS)</button>
 </div>
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '2.4';
+var APP_VERSION = '2.5';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -1611,13 +1659,11 @@ function updateResumo() {
 }
 
 function saveToDrive() {
-  var osNum = document.getElementById('f-os').value.trim();
-  if (!osNum) { alert('Preencha o número da OS antes de salvar no Drive.'); return; }
+  // Sem nº de OS não bloqueia: usa o nome do cliente (OS - FULANO DE TAL)
   doSaveToDrive('btn-save-drive','drive-note');
 }
 function saveToDrive2() {
-  var osNum = document.getElementById('f-os').value.trim();
-  if (!osNum) { alert('Preencha o número da OS antes de salvar no Drive.'); return; }
+  // Sem nº de OS não bloqueia: usa o nome do cliente (OS - FULANO DE TAL)
   doSaveToDrive('btn-save-drive-2','drive-note-2');
 }
 
@@ -1649,6 +1695,126 @@ async function gasUploadB64(name, b64, mime, folderId) {
   return gasCall({action: 'upload', folderId: folderId, fileName: name, mimeType: mime, base64: b64});
 }
 
+// ── Forma de chegada: mostra campos conforme a opção ──
+function onChegadaChange() {
+  var v = (document.getElementById('f-chegada') || {}).value || '';
+  var tr = document.getElementById('f-transportadora');
+  var auto = ['Correios', 'Cliente entregou'];
+  document.getElementById('fld-rastreio').style.display = v === 'Correios' ? '' : 'none';
+  document.getElementById('fld-transp-extra').style.display = v === 'Transportadora' ? '' : 'none';
+  document.getElementById('fld-transportadora').style.display = (v === 'Correios' || v === 'Cliente entregou') ? 'none' : '';
+  document.getElementById('lbl-transportadora').innerHTML = v === 'Outro' ? 'Quem entregou' : 'Transportadora <span class="req">*</span>';
+  if (auto.indexOf(v) >= 0) tr.value = v;
+  else if (auto.indexOf(tr.value) >= 0) tr.value = '';
+}
+
+// ── Coleta todos os dados do registro (usado no resumo .txt, na ficha .json e no copiar) ──
+function coletarRegistro(now) {
+  var g = function(id){ var el = document.getElementById(id); return el ? String(el.value).trim() : ''; };
+  var equips = [];
+  for (var i = 1; i <= equipCount; i++) {
+    var m = g('eq'+i+'-modelo'), s = g('eq'+i+'-serie'), l = g('eq'+i+'-lote');
+    if (m || s || l) equips.push({ modelo: m, serie: s, lote: l });
+  }
+  var cbSem = document.getElementById('cb-sem-acess');
+  var semAcess = !!(cbSem && cbSem.checked);
+  var acess = [];
+  if (!semAcess) {
+    for (var j = 1; j <= acessCount; j++) {
+      var an = g('ac'+j+'-nome');
+      if (an) acess.push({ nome: an, qtd: g('ac'+j+'-qtd'), obs: g('ac'+j+'-obs') });
+    }
+  }
+  var pad = function(n){ return String(n).padStart(2,'0'); };
+  return {
+    id: 'REC-' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds()),
+    versaoApp: APP_VERSION,
+    dataHoraCelular: now.toISOString(),
+    dataHoraTexto: now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR'),
+    os: g('f-os'),
+    referencia: g('f-os') ? 'OS-' + g('f-os') : 'OS - ' + (refSemOS() || 'SEM IDENTIFICAÇÃO'),
+    recebidoPor: g('f-recebedor'),
+    remetente: g('f-remetente'),
+    formaChegada: g('f-chegada'),
+    transportadora: g('f-transportadora'),
+    rastreio: g('f-rastreio'),
+    nfCte: g('f-nf'),
+    volumes: g('f-volumes'),
+    peso: g('f-peso'),
+    equipamentos: equips,
+    semAcessorios: semAcess,
+    acessorios: acess,
+    garantia: g('f-garantia'),
+    embalagem: g('f-embalagem'),
+    conforme: g('f-conforme'),
+    observacoes: g('f-obs'),
+    local: currentLocation || '',
+    qtdFotos: state.fotos.length,
+    qtdVideos: state.videos.length
+  };
+}
+
+function montarResumoTxt(r) {
+  var L = [];
+  L.push('RECEBIMENTO — ' + (r.os ? 'OS ' + r.os : r.referencia + ' (sem nº de OS)'));
+  L.push('Data/hora: ' + r.dataHoraTexto);
+  L.push('Recebido por: ' + (r.recebidoPor || 'não informado'));
+  if (r.remetente) L.push('Remetente: ' + r.remetente);
+  var ch = r.formaChegada || '';
+  if (ch === 'Correios') L.push('Chegada: Correios' + (r.rastreio ? ' | Rastreio: ' + r.rastreio : ''));
+  else if (ch === 'Transportadora') {
+    var t = 'Chegada: Transportadora' + (r.transportadora ? ' ' + r.transportadora : '');
+    if (r.nfCte) t += ' | NF/CT-e: ' + r.nfCte;
+    if (r.volumes) t += ' | Volumes: ' + r.volumes;
+    if (r.peso) t += ' | Peso: ' + r.peso;
+    L.push(t);
+  } else if (ch) L.push('Chegada: ' + ch + (r.transportadora && r.transportadora !== ch ? ' (' + r.transportadora + ')' : ''));
+  else if (r.transportadora) L.push('Transportadora: ' + r.transportadora);
+  if (r.equipamentos.length) {
+    r.equipamentos.forEach(function(e, i) {
+      var t = 'Equipamento ' + (i+1) + ': ' + (e.modelo || '—');
+      if (e.serie) t += ' | SN: ' + e.serie;
+      if (e.lote) t += ' | Lote: ' + e.lote;
+      L.push(t);
+    });
+  } else L.push('Equipamento: não informado');
+  if (r.semAcessorios) L.push('Acessórios: SEM ACESSÓRIOS');
+  else if (!r.acessorios.length) L.push('Acessórios: não informados');
+  else L.push('Acessórios: ' + r.acessorios.map(function(a) {
+    return (a.qtd ? a.qtd + '× ' : '') + a.nome + (a.obs ? ' (' + a.obs + ')' : '');
+  }).join('; '));
+  if (r.garantia) L.push('Garantia: ' + r.garantia);
+  if (r.embalagem) L.push('Embalagem: ' + r.embalagem);
+  if (r.conforme) L.push('Conforme OS: ' + r.conforme);
+  if (r.local) L.push('Local: ' + r.local);
+  if (r.observacoes) L.push('Obs: ' + r.observacoes);
+  L.push('Registros: ' + r.qtdFotos + ' foto(s), ' + r.qtdVideos + ' vídeo(s)');
+  return L.join('\n');
+}
+
+// Nome do cliente/remetente em maiúsculas, limpo para nome de pasta
+function refSemOS() {
+  var el = document.getElementById('f-remetente');
+  return (el ? el.value : '').toUpperCase().replace(/[\\/:*?"<>|#%]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function copyResumoTxt() {
+  var txt = montarResumoTxt(coletarRegistro(new Date()));
+  var btn = document.getElementById('btn-copy-resumo');
+  function ok() { if (btn) { btn.textContent = '✅ Resumo copiado'; setTimeout(function(){ btn.textContent = '📋 Copiar resumo (para colar na OS)'; }, 2500); } }
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); ok(); } catch(_) {}
+    document.body.removeChild(ta);
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, fallback);
+    else fallback();
+  } catch(_) { fallback(); }
+}
+
 async function doSaveToDrive(btnId, noteId) {
   btnId = btnId || 'btn-save-drive'; noteId = noteId || 'drive-note';
   var btn=document.getElementById(btnId), note=document.getElementById(noteId);
@@ -1660,20 +1826,19 @@ async function doSaveToDrive(btnId, noteId) {
     var yr=now.getFullYear(), monthName=MONTHS_PT[now.getMonth()];
     var dateStr=yr+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0');
     var timeStr=String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
-    
+    var semOS=!osNum;
+    if(semOS) osNum=refSemOS()||('SEM IDENTIFICACAO '+dateStr+'-'+timeStr);
+    var osFolderName=semOS?'OS - '+osNum:'OS-'+osNum;
+
     var rootId=DRIVE_ROOT_ID;
     var yearId=await gasFolder(String(yr),rootId);
     var monthId=await gasFolder(monthName,yearId);
-    var osId=await gasFolder('OS-'+osNum,monthId);
+    var osId=await gasFolder(osFolderName,monthId);
     var recId=await gasFolder('recebimento',osId);
     // Summary
-    var g=function(id){var el=document.getElementById(id);return el?el.value.trim():'';};
-    var txt='OS: '+osNum+'\nData: '+now.toLocaleDateString('pt-BR')+' '+now.toLocaleTimeString('pt-BR')+
-      '\nRemetente: '+g('f-remetente')+'\nTransportadora: '+g('f-transportadora')+
-      '\nEquip 1: '+g('eq1-modelo')+' | SN: '+g('eq1-serie')+' | Lote: '+g('eq1-lote')+
-      '\nEquip 2: '+g('eq2-modelo')+' | SN: '+g('eq2-serie')+' | Lote: '+g('eq2-lote')+
-      (currentLocation?'\nLocal: '+currentLocation:'')+
-      '\nEmbalagem: '+g('f-embalagem')+'\nConforme: '+g('f-conforme')+'\nObs: '+g('f-obs');
+    var registro=coletarRegistro(now);
+    registro.referencia=osFolderName;
+    var txt=montarResumoTxt(registro);
     note.textContent='Salvando resumo...';
     var txtB64 = btoa(unescape(encodeURIComponent(txt)));
     await gasUploadB64('recebimento_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.txt', txtB64, 'text/plain', recId);
@@ -1714,8 +1879,14 @@ async function doSaveToDrive(btnId, noteId) {
     for(var li=0;li<lp.length;li+=4){var lg=0.299*lp[li]+0.587*lp[li+1]+0.114*lp[li+2];var lv=lg<180?0:255;lp[li]=lp[li+1]=lp[li+2]=lv;lp[li+3]=255;}
     lCt.putImageData(lId,0,0);
     await gasUploadB64('etiqueta_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.png',lCv.toDataURL('image/png').split(',')[1],'image/png',recId);
+    // Ficha de dados (.json) para a planilha de controle — se falhar, não bloqueia
+    try {
+      note.textContent='Salvando ficha de dados...';
+      var fichaB64=btoa(unescape(encodeURIComponent(JSON.stringify(registro,null,2))));
+      await gasUploadB64('registro_'+registro.id+'_OS-'+osNum+'.json',fichaB64,'application/json',recId);
+    } catch(fe) { console.warn('[ficha] não salva:', fe); }
     btn.textContent='✅ Salvo!'; btn.style.background='#2e7d32';
-    note.textContent='✓ '+state.fotos.length+' foto(s) + '+state.videos.length+' vídeo(s) + etiqueta PNG → '+monthName+'/OS-'+osNum;
+    note.textContent='✓ '+state.fotos.length+' foto(s) + '+state.videos.length+' vídeo(s) + etiqueta PNG → '+monthName+'/'+osFolderName;
     setTimeout(function(){btn.textContent='☁️ Salvar no Drive';btn.style.background='';btn.disabled=false;resetForm();},4000);
   } catch(e) {
     btn.textContent='❌ Erro'; btn.disabled=false;
@@ -1730,11 +1901,13 @@ function resetForm() {
   renderGrid('fotos');
   renderGrid('videos');
   ['f-os','f-remetente','f-transportadora','eq1-modelo','eq1-serie','eq1-lote',
-   'eq2-modelo','eq2-serie','eq2-lote','f-embalagem','f-conforme','f-obs'].forEach(function(id){
+   'eq2-modelo','eq2-serie','eq2-lote','f-embalagem','f-conforme','f-obs',
+   'f-chegada','f-rastreio','f-nf','f-volumes','f-peso','f-garantia'].forEach(function(id){
     var el=document.getElementById(id); if(el){el.value='';}
   });
   var driveNote2 = document.getElementById('drive-note-2');
   if(driveNote2) driveNote2.textContent='Salva fotos, vídeos e resumo na pasta da OS no Drive';
+  try { onChegadaChange(); } catch(_) {}
   switchTab('videos');
 }
 
@@ -1747,6 +1920,7 @@ function resetForm() {
   document.getElementById('lbl-date').textContent = 'Entrada: ' + d + '/' + m + '/' + y;
   updateQR();
   loadFromURL();
+  try { var rb = localStorage.getItem('recebedor'); if (rb) document.getElementById('f-recebedor').value = rb; } catch(_) {}
 })();
 
 
@@ -1799,15 +1973,33 @@ function renderLabelCanvas(ctx, PW, PH) {
   y += 22;
 
   // Número da OS — maior fonte que couber na largura
-  var osTxt = (osNum && osNum !== '——') ? osNum : '—';
-  var fs = 72;
-  while (fs > 24) {
-    ctx.font = 'bold ' + fs + 'px ' + FONT;
-    if (ctx.measureText(osTxt).width <= TW) break;
-    fs -= 2;
+  var osTxt = (osNum && osNum !== '——') ? osNum : '';
+  if (osTxt) {
+    var fs = 72;
+    while (fs > 24) {
+      ctx.font = 'bold ' + fs + 'px ' + FONT;
+      if (ctx.measureText(osTxt).width <= TW) break;
+      fs -= 2;
+    }
+    ctx.fillText(osTxt, TX, y);
+    y += Math.round(fs * 0.9) + 6;
+  } else {
+    // Sem nº de OS: nome do cliente em até 3 linhas
+    var nome = refSemOS() || '—';
+    ctx.font = 'bold 26px ' + FONT;
+    var nl = [], nc = '';
+    nome.split(' ').forEach(function(w) {
+      var t = nc ? nc + ' ' + w : w;
+      if (ctx.measureText(t).width <= TW || !nc) nc = t; else { nl.push(nc); nc = w; }
+    });
+    if (nc) nl.push(nc);
+    if (nl.length > 3) { nl = nl.slice(0, 3); nl[2] += '…'; }
+    nl.forEach(function(l) {
+      while (l.length > 1 && ctx.measureText(l).width > TW) l = l.slice(0, -2) + '…';
+      ctx.fillText(l, TX, y); y += 29;
+    });
+    y += 4;
   }
-  ctx.fillText(osTxt, TX, y);
-  y += Math.round(fs * 0.9) + 6;
 
   // Linha separadora
   ctx.fillRect(TX, y, TW, 2);
