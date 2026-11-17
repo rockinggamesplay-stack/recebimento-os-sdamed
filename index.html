@@ -697,12 +697,12 @@ body {
   <div id="resumo-content"></div>
   <button class="btn-drive-active" id="btn-save-drive-2" onclick="saveToDrive2()" style="margin-top:4px;">☁️ Salvar no Drive</button>
   <div class="btn-drive-note" id="drive-note-2">Salva fotos, vídeos e resumo na pasta da OS no Drive</div>
-  <button class="btn-download-png" id="btn-copy-resumo" onclick="copyResumoTxt()" style="margin-top:10px;">📋 Copiar resumo (para colar na OS)</button>
+  <button class="btn-download-png" id="btn-copy-resumo" onclick="copyResumoTxt()" style="margin-top:10px;">📋 Copiar resumo (para colar nas OBS da NF de entrada)</button>
 </div>
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '2.6';
+var APP_VERSION = '2.7';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -1757,21 +1757,10 @@ function coletarRegistro(now) {
 }
 
 function montarResumoTxt(r) {
+  // Texto para as OBS da NF de entrada: só OS, equipamentos e acessórios
+  // (o restante dos dados fica na ficha .json, na planilha e no relatório técnico)
   var L = [];
   L.push('RECEBIMENTO — ' + (r.os ? 'OS ' + r.os : r.referencia + ' (sem nº de OS)'));
-  L.push('Data/hora: ' + r.dataHoraTexto);
-  L.push('Recebido por: ' + (r.recebidoPor || 'não informado'));
-  if (r.remetente) L.push('Remetente: ' + r.remetente);
-  var ch = r.formaChegada || '';
-  if (ch === 'Correios') L.push('Chegada: Correios' + (r.rastreio ? ' | Rastreio: ' + r.rastreio : ''));
-  else if (ch === 'Transportadora') {
-    var t = 'Chegada: Transportadora' + (r.transportadora ? ' ' + r.transportadora : '');
-    if (r.nfCte) t += ' | NF/CT-e: ' + r.nfCte;
-    if (r.volumes) t += ' | Volumes: ' + r.volumes;
-    if (r.peso) t += ' | Peso: ' + r.peso;
-    L.push(t);
-  } else if (ch) L.push('Chegada: ' + ch + (r.transportadora && r.transportadora !== ch ? ' (' + r.transportadora + ')' : ''));
-  else if (r.transportadora) L.push('Transportadora: ' + r.transportadora);
   if (r.equipamentos.length) {
     r.equipamentos.forEach(function(e, i) {
       var t = 'Equipamento ' + (i+1) + ': ' + (e.modelo || '—');
@@ -1785,12 +1774,6 @@ function montarResumoTxt(r) {
   else L.push('Acessórios: ' + r.acessorios.map(function(a) {
     return (a.qtd ? a.qtd + '× ' : '') + a.nome + (a.obs ? ' (' + a.obs + ')' : '');
   }).join('; '));
-  if (r.garantia) L.push('Garantia: ' + r.garantia);
-  if (r.embalagem) L.push('Embalagem: ' + r.embalagem);
-  if (r.conforme) L.push('Conforme OS: ' + r.conforme);
-  if (r.local) L.push('Local: ' + r.local);
-  if (r.observacoes) L.push('Obs: ' + r.observacoes);
-  L.push('Registros: ' + r.qtdFotos + ' foto(s), ' + r.qtdVideos + ' vídeo(s)');
   return L.join('\n');
 }
 
@@ -1803,7 +1786,7 @@ function refSemOS() {
 function copyResumoTxt() {
   var txt = montarResumoTxt(coletarRegistro(new Date()));
   var btn = document.getElementById('btn-copy-resumo');
-  function ok() { if (btn) { btn.textContent = '✅ Resumo copiado'; setTimeout(function(){ btn.textContent = '📋 Copiar resumo (para colar na OS)'; }, 2500); } }
+  function ok() { if (btn) { btn.textContent = '✅ Resumo copiado'; setTimeout(function(){ btn.textContent = '📋 Copiar resumo (para colar nas OBS da NF de entrada)'; }, 2500); } }
   function fallback() {
     var ta = document.createElement('textarea');
     ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
