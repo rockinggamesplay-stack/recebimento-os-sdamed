@@ -640,6 +640,7 @@ body {
   <button class="btn-print" onclick="printLabel()">🖨️ Imprimir (navegador)</button>
   <button class="btn-bt-print" id="btn-bt-print" onclick="printViaBluetooth()">🔵 Imprimir via Bluetooth</button>
   <div id="bt-print-status" style="display:none;padding:8px 12px;margin:4px 0 8px;border-radius:8px;background:#eef8ee;font-size:13px;font-weight:500;"></div>
+  <div id="app-ver" style="font-size:11px;color:#999;text-align:center;margin:0 0 6px;"></div>
   <button class="btn-download-png" onclick="downloadLabelPng()">⬇️ Baixar PNG (backup)</button>
 
 </div>
@@ -652,6 +653,23 @@ body {
 </div>
 
 <script>
+// ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
+var APP_VERSION = '2.4';
+(function checkAppVersion() {
+  var ve = document.getElementById('app-ver');
+  if (ve) ve.textContent = 'versão ' + APP_VERSION;
+  try {
+    fetch(location.pathname + '?v=' + Date.now(), { cache: 'no-store' })
+      .then(function(r) { return r.text(); })
+      .then(function(t) {
+        var m = t.match(/var APP_VERSION = '([^']+)'/);
+        if (!m || m[1] === APP_VERSION) return;
+        var k = 'reload-' + m[1];
+        try { if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, '1'); } catch(_) {}
+        location.reload();
+      }).catch(function() {});
+  } catch(_) {}
+})();
 // ── State ──────────────────────────────────────────────────────────────────
 var state = {
   fotos: [],
@@ -791,14 +809,14 @@ function compressAndAdd(file) {
   reader.onload = function(e) {
     var img = new Image();
     img.onload = function() {
-      var maxW = 1200;
-      var scale = img.width > maxW ? maxW / img.width : 1;
+      var maxW = 1920;
+      var scale = Math.max(img.width, img.height) > maxW ? maxW / Math.max(img.width, img.height) : 1;
       var w = Math.round(img.width * scale);
       var h = Math.round(img.height * scale);
       var canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      var dataUrl = canvas.toDataURL('image/jpeg', 0.88);
       var origKB  = Math.round(file.size / 1024);
       var compKB  = Math.round(dataUrl.length * 0.75 / 1024);
       state.fotos.push({ dataUrl: dataUrl, origKB: origKB, compKB: compKB, name: file.name });
@@ -1153,8 +1171,10 @@ function openCamera(type) {
     return;
   }
 
-  var constraints = { video: { facingMode: 'environment' } };
-  if (type === 'videos') constraints.audio = true;
+  // Sem resolução definida o Chrome usa 640x480 (vídeo pixelado). Pede HD.
+  var constraints = (type === 'videos')
+    ? { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: true }
+    : { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } };
 
   navigator.mediaDevices.getUserMedia(constraints)
     .then(function(stream) {
@@ -1244,9 +1264,9 @@ function capturePhoto() {
   });
   // ── fim do overlay ─────────────────────────────────────────────────────
 
-  // compress
-  var maxW = 1200;
-  var scale = canvas.width > maxW ? maxW / canvas.width : 1;
+  // compress (lado maior até 1920px)
+  var maxW = 1920;
+  var scale = Math.max(canvas.width, canvas.height) > maxW ? maxW / Math.max(canvas.width, canvas.height) : 1;
   if (scale < 1) {
     var c2 = document.createElement('canvas');
     c2.width = Math.round(canvas.width * scale);
@@ -1254,7 +1274,7 @@ function capturePhoto() {
     c2.getContext('2d').drawImage(canvas, 0, 0, c2.width, c2.height);
     canvas = c2;
   }
-  var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+  var dataUrl = canvas.toDataURL('image/jpeg', 0.88);
   var compKB = Math.round(dataUrl.length * 0.75 / 1024);
   // Flash effect
   var fl = document.getElementById('cam-flash');
@@ -1275,31 +1295,94 @@ function capturePhoto() {
   pov.classList.add('show');
 }
 
+// ── Carimbo no vídeo: desenha câmera + caixa de texto num canvas e grava o canvas ──
+var stampStream = null, stampActive = false;
+function drawStampBox(ctx, W, H, lines) {
+  var fSize = Math.max(14, Math.round(H * 0.028));
+  ctx.font = 'bold ' + fSize + 'px Arial';
+  var padX = Math.round(fSize * 0.6), padY = Math.round(fSize * 0.5), lineH = Math.round(fSize * 1.4);
+  var boxW = 0;
+  lines.forEach(function(l) { boxW = Math.max(boxW, ctx.measureText(l).width); });
+  boxW += padX * 2;
+  var boxH = lines.length * lineH + padY * 2;
+  var bx = 8, by = H - boxH - 8;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(bx, by, boxW, boxH);
+  ctx.fillStyle = '#FFFFFF';
+  lines.forEach(function(line, i) { ctx.fillText(line, bx + padX, by + padY + fSize + i * lineH); });
+}
+function startStampedStream() {
+  var video = document.getElementById('cam-video');
+  if (!camStream || !video.videoWidth) return null;
+  var c = document.createElement('canvas');
+  if (!c.captureStream) return null;
+  c.width = video.videoWidth; c.height = video.videoHeight;
+  var ctx = c.getContext('2d');
+  var osNum = document.getElementById('f-os') ? document.getElementById('f-os').value.trim() : '';
+  var lastSec = -1, lines = [];
+  stampActive = true;
+  function frame() {
+    if (!stampActive) return;
+    var now = new Date();
+    if (now.getSeconds() !== lastSec) {
+      lastSec = now.getSeconds();
+      lines = ['SDAMed'];
+      if (osNum) lines.push('OS: ' + osNum);
+      lines.push(now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+      if (currentLocation) lines.push('📍 ' + currentLocation);
+    }
+    ctx.drawImage(video, 0, 0, c.width, c.height);
+    drawStampBox(ctx, c.width, c.height, lines);
+    if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(frame);
+    else requestAnimationFrame(frame);
+  }
+  frame();
+  var out = c.captureStream(30);
+  camStream.getAudioTracks().forEach(function(t) { out.addTrack(t); });
+  stampStream = out;
+  return out;
+}
+function stopStampedStream() {
+  stampActive = false;
+  if (stampStream) { stampStream.getVideoTracks().forEach(function(t) { t.stop(); }); stampStream = null; }
+}
+
 function toggleRecording() {
   var btn = document.getElementById('cam-record-btn');
   var recLabel = document.getElementById('cam-rec-label');
 
   if (!mediaRecorder || mediaRecorder.state === 'inactive') {
     recordedChunks = [];
-    var mimeType = 'video/webm;codecs=vp9';
-    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
-    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = '';
-    var opts = mimeType ? { mimeType: mimeType } : {};
-    try { mediaRecorder = new MediaRecorder(camStream, opts); }
-    catch(e) { mediaRecorder = new MediaRecorder(camStream); }
+    // MP4/H.264 (hardware no Android, abre em qualquer lugar); senão WebM VP8
+    var mimeType = '';
+    ['video/mp4;codecs=avc1.42E01F,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4',
+     'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'].some(function(t) {
+      if (MediaRecorder.isTypeSupported(t)) { mimeType = t; return true; } return false;
+    });
+    var opts = { videoBitsPerSecond: 2500000, audioBitsPerSecond: 96000 };
+    if (mimeType) opts.mimeType = mimeType;
+    var recStream = null;
+    try { recStream = startStampedStream(); } catch(e) { recStream = null; }
+    if (!recStream) { stopStampedStream(); recStream = camStream; }
+    try { mediaRecorder = new MediaRecorder(recStream, opts); }
+    catch(e) {
+      try { mediaRecorder = new MediaRecorder(recStream); }
+      catch(e2) { stopStampedStream(); mediaRecorder = new MediaRecorder(camStream); }
+    }
 
     mediaRecorder.ondataavailable = function(e) {
       if (e.data && e.data.size > 0) recordedChunks.push(e.data);
     };
 
     mediaRecorder.onstop = function() {
+      stopStampedStream();
       var mime = mediaRecorder.mimeType || 'video/webm';
       var blob = new Blob(recordedChunks, { type: mime });
       var url = URL.createObjectURL(blob);
       var sizeKB = Math.round(blob.size / 1024);
       var vNow = new Date();
       var vTs = vNow.getFullYear()+String(vNow.getMonth()+1).padStart(2,'0')+String(vNow.getDate()).padStart(2,'0')+'_'+String(vNow.getHours()).padStart(2,'0')+String(vNow.getMinutes()).padStart(2,'0')+String(vNow.getSeconds()).padStart(2,'0');
-      pendingCapture = { type:'videos', url:url, name:'video_'+vTs+'.webm', sizeKB:sizeKB };
+      pendingCapture = { type:'videos', url:url, name:'video_'+vTs+(mime.indexOf('mp4')>=0?'.mp4':'.webm'), sizeKB:sizeKB };
       var pov = document.getElementById('media-prev-overlay');
       document.getElementById('media-prev-img').style.display = 'none';
       document.getElementById('media-prev-img').src = '';
@@ -1589,6 +1672,7 @@ async function doSaveToDrive(btnId, noteId) {
       '\nRemetente: '+g('f-remetente')+'\nTransportadora: '+g('f-transportadora')+
       '\nEquip 1: '+g('eq1-modelo')+' | SN: '+g('eq1-serie')+' | Lote: '+g('eq1-lote')+
       '\nEquip 2: '+g('eq2-modelo')+' | SN: '+g('eq2-serie')+' | Lote: '+g('eq2-lote')+
+      (currentLocation?'\nLocal: '+currentLocation:'')+
       '\nEmbalagem: '+g('f-embalagem')+'\nConforme: '+g('f-conforme')+'\nObs: '+g('f-obs');
     note.textContent='Salvando resumo...';
     var txtB64 = btoa(unescape(encodeURIComponent(txt)));
@@ -1606,11 +1690,14 @@ async function doSaveToDrive(btnId, noteId) {
     for(var i=0;i<state.videos.length;i++){
       note.textContent='Enviando vídeo '+(i+1)+' de '+state.videos.length+'...';
       var vi=state.videos[i];
-      var vBuf=await (await fetch(vi.url)).arrayBuffer();
+      var vBlob=await (await fetch(vi.url)).blob();
+      var vMime=(vBlob.type||'video/webm').split(';')[0];
+      var vExt=vMime.indexOf('mp4')>=0?'.mp4':(vMime.indexOf('quicktime')>=0?'.mov':'.webm');
+      var vBuf=await vBlob.arrayBuffer();
       var vB64=arrToB64(new Uint8Array(vBuf));
       var vNow=new Date();
       var vTs=vNow.getFullYear()+String(vNow.getMonth()+1).padStart(2,'0')+String(vNow.getDate()).padStart(2,'0')+'_'+String(vNow.getHours()).padStart(2,'0')+String(vNow.getMinutes()).padStart(2,'0')+String(vNow.getSeconds()+i).padStart(2,'0');
-      await gasUploadB64('ordem de servico '+vTs+' - SDAMed.mp4', vB64, 'video/webm', recId);
+      await gasUploadB64('ordem de servico '+vTs+' - SDAMed'+vExt, vB64, vMime, recId);
     }
     // Etiqueta PNG alta resolução (2x = 768×460px para 50×30mm)
     note.textContent='Salvando etiqueta PNG...';
@@ -2020,7 +2107,7 @@ async function printViaBluetooth() {
     await sleep(300);
 
     if (gatt) try { gatt.disconnect(); } catch(_) {}
-    setStatus('✅ Etiqueta impressa com sucesso!');
+    setStatus('✅ Etiqueta impressa com sucesso! (v' + APP_VERSION + ')');
     setBtnDisabled(false);
     setTimeout(function(){ setStatus('', false); }, 5000);
 
