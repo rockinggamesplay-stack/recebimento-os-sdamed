@@ -973,7 +973,7 @@ function updateQR() {
   container.innerHTML = '';
 
   try {
-    new QRCode(container, {
+    window._labelQR = new QRCode(container, {
       text: qrData,
       width:  220,
       height: 220,
@@ -984,7 +984,7 @@ function updateQR() {
   } catch(e) {
     // Fallback: só OS e data se URL for longa demais
     try {
-      new QRCode(container, {
+      window._labelQR = new QRCode(container, {
         text: base + '?o=' + encodeURIComponent(os) + '&d=' + d + m + y,
         width:  220,
         height: 220,
@@ -1665,74 +1665,107 @@ function resetForm() {
 
 // ── Renderiza a etiqueta em um canvas 384×PH já criado ──
 function renderLabelCanvas(ctx, PW, PH) {
-  var osNum = document.getElementById('lbl-os-num').textContent;
-  var dtTxt = document.getElementById('lbl-date').textContent;
-  var eqTxt = document.getElementById('lbl-equip').textContent;
+  // Layout para impressora térmica: só preto puro (cinza some no 1-bit),
+  // QR desenhado módulo a módulo com tamanho inteiro (leitura confiável).
+  var osNum = (document.getElementById('lbl-os-num').textContent || '').trim();
+  var dtTxt = (document.getElementById('lbl-date').textContent || '').trim();
+  var eqTxt = (document.getElementById('lbl-equip').textContent || '').trim();
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, PW, PH);
-  ctx.strokeStyle = '#cccccc';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0.5, 0.5, PW - 1, PH - 1);
+  ctx.fillStyle = '#000000';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
 
-  var PAD = 10;
-  var QR  = 110;
-  var qrX = PAD;
-  var qrY = Math.round((PH - QR) / 2);
-  var vSep = qrX + QR + 8;
-
-  ctx.strokeStyle = '#dddddd';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(vSep, PAD); ctx.lineTo(vSep, PH - PAD);
-  ctx.stroke();
-
-  // qrcode.js 1.0.0 appenda <img> (não <canvas>) no container — buscar ambos
-  var qrEl = document.querySelector('#label-qr canvas') ||
-             document.querySelector('#label-qr img');
-  if (qrEl && (qrEl.tagName === 'CANVAS' || (qrEl.complete && qrEl.naturalWidth > 0))) {
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(qrEl, qrX, qrY, QR, QR);
-    ctx.imageSmoothingEnabled = true;
+  var PAD = 12;
+  var maxQR = Math.min(PH - 2 * PAD, 206); // QR até ~26mm, sobra espaço p/ texto
+  var qrSize = 0;
+  var model = window._labelQR && window._labelQR._oQRCode;
+  if (model && model.getModuleCount) {
+    var n = model.getModuleCount();
+    var mod = Math.max(1, Math.floor(maxQR / n));
+    qrSize = n * mod;
+    var qx = PAD, qy = Math.round((PH - qrSize) / 2);
+    for (var qr = 0; qr < n; qr++) {
+      for (var qc = 0; qc < n; qc++) {
+        if (model.isDark(qr, qc)) ctx.fillRect(qx + qc * mod, qy + qr * mod, mod, mod);
+      }
+    }
+  } else {
+    var qrEl = document.querySelector('#label-qr canvas') || document.querySelector('#label-qr img');
+    if (qrEl && (qrEl.tagName === 'CANVAS' || (qrEl.complete && qrEl.naturalWidth > 0))) {
+      qrSize = maxQR;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(qrEl, PAD, PAD, qrSize, qrSize);
+      ctx.imageSmoothingEnabled = true;
+    }
   }
 
-  var TX = vSep + PAD;
+  var TX = qrSize ? PAD + qrSize + 14 : PAD;
   var TW = PW - TX - PAD;
+  var FONT = 'Arial, Helvetica, sans-serif';
 
-  ctx.font = '10px Arial';
-  ctx.fillStyle = '#999999';
-  ctx.fillText('ORDEM DE SERVIÇO', TX, 14);
+  // "OS"
+  var y = PAD;
+  ctx.font = 'bold 18px ' + FONT;
+  ctx.fillText('OS', TX, y);
+  y += 22;
 
-  ctx.fillStyle = '#000000';
-  ctx.font = 'bold 55px Arial';
-  ctx.fillText(osNum || '——', TX, 74);
+  // Número da OS — maior fonte que couber na largura
+  var osTxt = (osNum && osNum !== '——') ? osNum : '—';
+  var fs = 72;
+  while (fs > 24) {
+    ctx.font = 'bold ' + fs + 'px ' + FONT;
+    if (ctx.measureText(osTxt).width <= TW) break;
+    fs -= 2;
+  }
+  ctx.fillText(osTxt, TX, y);
+  y += Math.round(fs * 0.9) + 6;
 
-  ctx.strokeStyle = '#dddddd';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(TX, 83); ctx.lineTo(PW - PAD, 83);
-  ctx.stroke();
+  // Linha separadora
+  ctx.fillRect(TX, y, TW, 2);
+  y += 9;
 
-  ctx.fillStyle = '#000000';
-  ctx.font = 'bold 14px Arial';
-  var words = eqTxt.split(' '), ln = '', y = 100;
-  words.forEach(function(w) {
-    var test = ln ? ln + ' ' + w : w;
-    if (ctx.measureText(test).width > TW && ln) {
-      ctx.fillText(ln, TX, y); y += 17; ln = w;
-    } else { ln = test; }
-  });
-  if (ln) ctx.fillText(ln, TX, y);
+  // Data no rodapé
+  var dfs = 16;
+  do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(dtTxt).width > TW && --dfs > 10);
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(dtTxt, TX, PH - PAD);
+  ctx.textBaseline = 'top';
+  var yLimit = PH - PAD - 22;
 
-  ctx.font = '11px Arial';
-  ctx.fillStyle = '#666666';
-  ctx.fillText(dtTxt, TX, PH - 8);
-
-  ctx.font = '9px Arial';
-  ctx.fillStyle = '#bbbbbb';
-  ctx.textAlign = 'right';
-  ctx.fillText('SDAMed', PW - PAD, PH - 8);
-  ctx.textAlign = 'left';
+  // Equipamento · série (quebra por caractere, reticências se não couber)
+  if (eqTxt) {
+    ctx.font = 'bold 18px ' + FONT;
+    var LH = 21;
+    var lines = [], cur = '';
+    var words = eqTxt.split(' ');
+    for (var wi = 0; wi < words.length; wi++) {
+      var w = words[wi];
+      var test = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(test).width <= TW) { cur = test; continue; }
+      if (cur) { lines.push(cur); cur = ''; }
+      while (ctx.measureText(w).width > TW) {
+        var k = w.length;
+        while (k > 1 && ctx.measureText(w.slice(0, k)).width > TW) k--;
+        lines.push(w.slice(0, k));
+        w = w.slice(k);
+      }
+      cur = w;
+    }
+    if (cur) lines.push(cur);
+    var maxLines = Math.max(1, Math.floor((yLimit - y) / LH));
+    if (lines.length > maxLines) {
+      lines = lines.slice(0, maxLines);
+      var last = lines[maxLines - 1];
+      while (last.length > 1 && ctx.measureText(last + '…').width > TW) last = last.slice(0, -1);
+      lines[maxLines - 1] = last + '…';
+    }
+    for (var li = 0; li < lines.length; li++) {
+      ctx.fillText(lines[li], TX, y);
+      y += LH;
+    }
+  }
 }
 
 function downloadLabelPng() {
@@ -1778,22 +1811,13 @@ async function printViaBluetooth() {
     return;
   }
 
-  // === MODO SIMPLES: só o número da OS, sem QR, para testar bitmap ===
+  // === ETIQUETA COMPLETA: QR + OS + equipamento + data (mesmo layout do PNG) ===
   var PW = 384;
   var PH = labelSizeMm === 30 ? 230 : 307;
   var canvas = document.createElement('canvas');
   canvas.width = PW; canvas.height = PH;
   var ctx = canvas.getContext('2d');
-  // Fundo branco explícito
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, PW, PH);
-  // Número da OS em preto, fonte grande
-  var osNum = document.getElementById('lbl-os-num').textContent || 'OS';
-  ctx.fillStyle = '#000000';
-  ctx.font = 'bold 80px Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('OS: ' + osNum, PW / 2, PH / 2);
+  renderLabelCanvas(ctx, PW, PH);
 
   // Converter para 1-bit (48 bytes/linha = 384px)
   var imgData = ctx.getImageData(0, 0, PW, PH);
@@ -1812,7 +1836,7 @@ async function printViaBluetooth() {
     rows.push(rb);
   }
   var nonBlankRows = rows.filter(function(r){return r.some(function(b){return b!==0;});}).length;
-  console.log('[BT SIMPLES] ' + nonBlankRows + '/' + PH + ' linhas com dados');
+  console.log('[BT] ' + nonBlankRows + '/' + PH + ' linhas com dados');
 
   var statusEl = document.getElementById('bt-print-status');
   function setStatus(msg, isError) {
