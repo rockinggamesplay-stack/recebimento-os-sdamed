@@ -1901,12 +1901,13 @@ async function printViaBluetooth() {
   function sleep(ms) { return new Promise(function(r){setTimeout(r,ms);}); }
 
   function sendRaw(bytes) {
-    // Prefere write-with-response (confirmado) se disponível — mais confiável para dados de bitmap
-    // Fallback para writeValueWithoutResponse se a característica não suportar write
-    if (channel.properties && channel.properties.write) {
-      return channel.writeValue(bytes.buffer);
+    // Niimbot B1 usa writeValueWithoutResponse — NÃO usar writeValue (com resposta)
+    // writeValue com pacotes de 59 bytes pode falhar por MTU pequeno no BLE
+    if (channel.properties && channel.properties.writeWithoutResponse) {
+      return channel.writeValueWithoutResponse(bytes.buffer);
     }
-    return channel.writeValueWithoutResponse(bytes.buffer);
+    // Fallback para writeValue se for o único modo disponível
+    return channel.writeValue(bytes.buffer);
   }
 
   function sendWait(cmd, data, timeout) {
@@ -1945,8 +1946,10 @@ async function printViaBluetooth() {
     await sendWait(0x23, [1]);
     await sleep(50);
 
-    // 4. PrintStart 7b (0x01): [hi, lo, 0,0,0,0, pageColor=1]
-    await sendWait(0x01, [0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01]);
+    // 4. PrintStart 7b (0x01): [totalPages_hi, totalPages_lo, 0,0,0,0, pageColor=0 (SingleColor)]
+    // pageColor=0 = SingleColor (correto para etiquetas brancas comuns)
+    // pageColor=1 = DoubleColor (para etiquetas bicolor: imprime tudo preto!)
+    await sendWait(0x01, [0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00]);
     await sleep(50);
 
     // 5. PageStart (0x03)
