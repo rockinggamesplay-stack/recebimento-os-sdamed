@@ -1778,41 +1778,41 @@ async function printViaBluetooth() {
     return;
   }
 
+  // === MODO SIMPLES: só o número da OS, sem QR, para testar bitmap ===
   var PW = 384;
   var PH = labelSizeMm === 30 ? 230 : 307;
   var canvas = document.createElement('canvas');
   canvas.width = PW; canvas.height = PH;
   var ctx = canvas.getContext('2d');
-  // Preenche fundo branco — sem isso, pixels transparentes (RGB=0,0,0) seriam tratados como preto
+  // Fundo branco explícito
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, PW, PH);
-  renderLabelCanvas(ctx, PW, PH);
+  // Número da OS em preto, fonte grande
+  var osNum = document.getElementById('lbl-os-num').textContent || 'OS';
+  ctx.fillStyle = '#000000';
+  ctx.font = 'bold 80px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('OS: ' + osNum, PW / 2, PH / 2);
 
-  // Converter pixels do canvas para linhas 1-bit (48 bytes = 384px por linha)
+  // Converter para 1-bit (48 bytes/linha = 384px)
   var imgData = ctx.getImageData(0, 0, PW, PH);
   var px = imgData.data;
-  var BYTES = 48; // 384/8
+  var BYTES = 48;
   var rows = [];
   for (var row = 0; row < PH; row++) {
     var rb = new Uint8Array(BYTES);
     for (var col = 0; col < PW; col++) {
       var pi = (row * PW + col) * 4;
       var gray = 0.299 * px[pi] + 0.587 * px[pi+1] + 0.114 * px[pi+2];
-      if (gray < 180) {
+      if (gray < 128) {
         rb[Math.floor(col / 8)] |= (1 << (7 - (col % 8)));
       }
     }
     rows.push(rb);
   }
-
-  // Diagnóstico: conta linhas com dados (para debug de bitmap vazio)
-  var nonBlankRows = 0;
-  for (var ri = 0; ri < rows.length; ri++) {
-    for (var bi2 = 0; bi2 < rows[ri].length; bi2++) {
-      if (rows[ri][bi2] !== 0) { nonBlankRows++; break; }
-    }
-  }
-  console.log('[BT Print] Bitmap: ' + nonBlankRows + '/' + PH + ' linhas com dados');
+  var nonBlankRows = rows.filter(function(r){return r.some(function(b){return b!==0;});}).length;
+  console.log('[BT SIMPLES] ' + nonBlankRows + '/' + PH + ' linhas com dados');
 
   var statusEl = document.getElementById('bt-print-status');
   function setStatus(msg, isError) {
