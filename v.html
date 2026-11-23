@@ -1,9 +1,44 @@
 <!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Recebimento SDAMed</title></head>
-<body style="font-family:Arial,sans-serif;padding:24px;color:#333">Abrindo o registro do recebimento…
+<title>Recebimento SDAMed</title>
+<style>
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;color:#222}
+.top{background:#CC0000;color:#fff;padding:14px 16px}.top b{font-size:22px}.top div{font-size:13px;opacity:.9}
+.box{background:#fff;margin:12px;padding:14px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:#666;font-weight:normal;padding:6px 8px 6px 0;vertical-align:top;width:38%}
+td{padding:6px 0;border-bottom:1px solid #eee}
+a.bt{display:block;text-align:center;background:#CC0000;color:#fff;text-decoration:none;padding:12px;border-radius:6px;font-weight:bold;margin-top:10px}
+a.bt.sec{background:#424242}.aviso{font-size:13px;color:#666;margin-top:10px}
+</style></head>
+<body>
+<div class="top"><b>SDAMed · Recebimento</b><div id="sub">Carregando…</div></div>
+<div class="box" id="conteudo">Buscando o registro do recebimento…</div>
 <script>
-// QR da etiqueta (app v3.0+): v.html?<OS> -> página do recebimento no Apps Script
-location.replace("https://script.google.com/macros/s/AKfycbzOOu_u7pNqp_qdGtW3T1jiIJFc0SOAElbru3aN1EgsTRwF0kQF5fcJScL_IQPfCEqy/exec?v=" + location.search.slice(1));
+// QR da etiqueta (app v3.0+): v.html?<OS>. Busca os dados no Apps Script SEM login (evita o erro de várias contas Google no celular).
+var EXEC = "https://script.google.com/macros/s/AKfycbzOOu_u7pNqp_qdGtW3T1jiIJFc0SOAElbru3aN1EgsTRwF0kQF5fcJScL_IQPfCEqy/exec";
+var ref = decodeURIComponent(location.search.slice(1) || "");
+function esc(t){ return String(t == null ? "" : t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+var box = document.getElementById("conteudo"), sub = document.getElementById("sub");
+sub.textContent = ref ? "OS " + ref : "";
+fetch(EXEC + "?f=json&v=" + encodeURIComponent(ref), { credentials: "omit" })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (!d || !d.ok) {
+      box.innerHTML = "<b>Registro ainda não encontrado.</b><p class='aviso'>Os dados entram no controle até 10 minutos depois de salvar no app. " +
+        "Tente de novo em alguns minutos. Se continuar sem aparecer, fale com a Logística: (19) 98202-0018.</p>";
+      return;
+    }
+    sub.textContent = "OS " + d.os;
+    var h = "<table>" + d.campos.map(function(c){ return "<tr><th>" + esc(c[0]) + "</th><td>" + esc(c[1]) + "</td></tr>"; }).join("") + "</table>";
+    if (d.pdf) h += "<a class='bt' href='" + esc(d.pdf) + "' target='_blank'>📄 Abrir relatório de recebimento (PDF)</a>";
+    else h += "<p class='aviso'>O relatório em PDF é gerado alguns minutos depois do registro.</p>";
+    if (d.pasta) h += "<a class='bt sec' href='https://drive.google.com/drive/folders/" + esc(d.pasta) + "' target='_blank'>📁 Fotos e vídeos no Drive</a>";
+    h += "<p class='aviso'>PDF e pasta abrem só para quem tem acesso ao Drive da SDAMed.</p>";
+    box.innerHTML = h;
+  })
+  .catch(function(){
+    box.innerHTML = "<b>Não foi possível carregar agora.</b><p class='aviso'>Verifique a internet e tente de novo.</p>";
+  });
 </script>
 </body></html>
