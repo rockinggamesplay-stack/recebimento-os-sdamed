@@ -711,7 +711,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '3.0';
+var APP_VERSION = '3.1';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -728,6 +728,14 @@ var APP_VERSION = '3.0';
   } catch(_) {}
 })();
 // ── State ──────────────────────────────────────────────────────────────────
+// v3.1: código aleatório da etiqueta — só quem escaneia a etiqueta real vê a página do recebimento
+function novaChaveQR() {
+  var a = 'abcdefghjkmnpqrstuvwxyz23456789', s = '', r = new Uint8Array(6);
+  try { crypto.getRandomValues(r); } catch (_) { for (var k = 0; k < 6; k++) r[k] = Math.floor(Math.random() * 256); }
+  for (var i = 0; i < 6; i++) s += a[r[i] % a.length];
+  return s;
+}
+var CHAVE_QR = novaChaveQR();
 var state = {
   fotos: [],
   videos: []
@@ -1044,7 +1052,7 @@ function updateQR() {
 
   // v3.0: o QR abre a página do recebimento (dados + relatório PDF), não o app de entrada
   var qrData = 'https://rockinggamesplay-stack.github.io/recebimento-os-sdamed/v.html?' +
-    encodeURIComponent(os || refSemOS() || '');
+    encodeURIComponent(os || refSemOS() || '') + '.' + CHAVE_QR;
 
   var container = document.getElementById('label-qr');
   container.innerHTML = '';
@@ -1759,6 +1767,7 @@ function coletarRegistro(now) {
     acessorios: acess,
     garantia: g('f-garantia'),
     contribuinte: g('f-contribuinte'),
+    chaveQR: CHAVE_QR,
     embalagem: g('f-embalagem'),
     conforme: g('f-conforme'),
     observacoes: g('f-obs'),
@@ -1984,6 +1993,7 @@ async function doSaveToDrive(btnId, noteId) {
 
 function resetForm() {
   state.salvo = null;
+  CHAVE_QR = novaChaveQR();
   state.fotos = [];
   state.videos = [];
   renderGrid('fotos');
