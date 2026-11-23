@@ -711,7 +711,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '2.9';
+var APP_VERSION = '3.0';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -1042,7 +1042,9 @@ function updateQR() {
   if (acessStr)  p.push('ac=' + encodeURIComponent(acessStr.slice(0,40)));
   p.push('d=' + d + m + y + hh + mi);
 
-  var qrData = base + '?' + p.join('&');
+  // v3.0: o QR abre a página do recebimento (dados + relatório PDF), não o app de entrada
+  var qrData = 'https://rockinggamesplay-stack.github.io/recebimento-os-sdamed/v.html?' +
+    encodeURIComponent(os || refSemOS() || '');
 
   var container = document.getElementById('label-qr');
   container.innerHTML = '';
@@ -2022,7 +2024,7 @@ function resetForm() {
 function renderLabelCanvas(ctx, PW, PH) {
   // Layout para impressora térmica: só preto puro (cinza some no 1-bit),
   // QR desenhado módulo a módulo com tamanho inteiro (leitura confiável).
-  // v2.9: QR menor para caber os dados da aba Dados (equipamento, acessórios, garantia, quem recebeu).
+  // v3.0: QR curto (abre a página do recebimento) e menor; dados da aba Dados abaixo do equipamento, fonte menor sem negrito.
   var osNum = (document.getElementById('lbl-os-num').textContent || '').trim();
   var dtTxt = (document.getElementById('lbl-date').textContent || '').trim();
   var eqTxt = (document.getElementById('lbl-equip').textContent || '').trim();
@@ -2034,12 +2036,12 @@ function renderLabelCanvas(ctx, PW, PH) {
   ctx.textBaseline = 'top';
 
   var PAD = 12;
-  var maxQR = Math.min(PH - 2 * PAD, PH > 260 ? 170 : 150);
+  var maxQR = Math.min(PH - 2 * PAD, PH > 260 ? 130 : 115);
   var qrSize = 0;
   var model = window._labelQR && window._labelQR._oQRCode;
   if (model && model.getModuleCount) {
     var n = model.getModuleCount();
-    var mod = Math.max(2, Math.floor(maxQR / n));
+    var mod = Math.max(3, Math.floor(maxQR / n)); // mínimo 3 pontos por módulo = leitura confiável
     qrSize = n * mod;
     var qx = PAD, qy = Math.round((PH - qrSize) / 2);
     for (var qr = 0; qr < n; qr++) {
@@ -2112,8 +2114,8 @@ function renderLabelCanvas(ctx, PW, PH) {
   var rodape = dtTxt + (R.recebidoPor ? ' · ' + R.recebidoPor : '');
 
   // Rodapé: data de entrada + quem recebeu
-  var dfs = 15;
-  do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW && --dfs > 10);
+  var dfs = 13;
+  do { ctx.font = dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW && --dfs > 10);
   ctx.textBaseline = 'bottom';
   ctx.fillText(rodape, TX, PH - PAD);
   ctx.textBaseline = 'top';
@@ -2149,16 +2151,17 @@ function renderLabelCanvas(ctx, PW, PH) {
     return ls.length;
   }
 
-  var LH = 17;
-  var livres = Math.max(0, Math.floor((yLimit - y) / LH));
+  var LH = 16;
   var resGar = garTxt ? 1 : 0;
   var resAc = acTxt ? 1 : 0;
-  // Equipamento · série: até 2 linhas, sem roubar a linha de acessórios e de garantia
-  livres -= escrever(eqTxt, 'bold 15px ' + FONT, LH, Math.min(2, livres - resGar - resAc));
-  // Acessórios: o que sobrar (menos a linha da garantia)
-  livres -= escrever(acTxt ? 'Acess.: ' + acTxt : '', 'bold 14px ' + FONT, LH, livres - resGar);
-  // Garantia (+ contribuinte)
-  escrever(garTxt, 'bold 14px ' + FONT, LH, Math.min(1, livres));
+  // Equipamento · série (negrito): até 2 linhas, sem roubar a linha de acessórios e de garantia
+  var livEq = Math.floor((yLimit - y - (resGar + resAc) * LH) / 18);
+  escrever(eqTxt, 'bold 15px ' + FONT, 18, Math.min(2, Math.max(1, livEq)));
+  y += 2;
+  // Abaixo do equipamento: fonte menor, sem negrito
+  var livres = Math.max(0, Math.floor((yLimit - y) / LH));
+  livres -= escrever(acTxt ? 'Acess.: ' + acTxt : '', '13px ' + FONT, LH, livres - resGar);
+  escrever(garTxt, '13px ' + FONT, LH, Math.min(1, livres));
 }
 
 function downloadLabelPng() {
