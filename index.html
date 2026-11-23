@@ -711,7 +711,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '2.8';
+var APP_VERSION = '2.9';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -2022,6 +2022,7 @@ function resetForm() {
 function renderLabelCanvas(ctx, PW, PH) {
   // Layout para impressora térmica: só preto puro (cinza some no 1-bit),
   // QR desenhado módulo a módulo com tamanho inteiro (leitura confiável).
+  // v2.9: QR menor para caber os dados da aba Dados (equipamento, acessórios, garantia, quem recebeu).
   var osNum = (document.getElementById('lbl-os-num').textContent || '').trim();
   var dtTxt = (document.getElementById('lbl-date').textContent || '').trim();
   var eqTxt = (document.getElementById('lbl-equip').textContent || '').trim();
@@ -2033,12 +2034,12 @@ function renderLabelCanvas(ctx, PW, PH) {
   ctx.textBaseline = 'top';
 
   var PAD = 12;
-  var maxQR = Math.min(PH - 2 * PAD, 206); // QR até ~26mm, sobra espaço p/ texto
+  var maxQR = Math.min(PH - 2 * PAD, PH > 260 ? 170 : 150);
   var qrSize = 0;
   var model = window._labelQR && window._labelQR._oQRCode;
   if (model && model.getModuleCount) {
     var n = model.getModuleCount();
-    var mod = Math.max(1, Math.floor(maxQR / n));
+    var mod = Math.max(2, Math.floor(maxQR / n));
     qrSize = n * mod;
     var qx = PAD, qy = Math.round((PH - qrSize) / 2);
     for (var qr = 0; qr < n; qr++) {
@@ -2056,89 +2057,108 @@ function renderLabelCanvas(ctx, PW, PH) {
     }
   }
 
-  var TX = qrSize ? PAD + qrSize + 14 : PAD;
+  var TX = qrSize ? PAD + qrSize + 12 : PAD;
   var TW = PW - TX - PAD;
   var FONT = 'Arial, Helvetica, sans-serif';
 
   // "OS"
   var y = PAD;
-  ctx.font = 'bold 18px ' + FONT;
+  ctx.font = 'bold 16px ' + FONT;
   ctx.fillText('OS', TX, y);
-  y += 22;
+  y += 19;
 
   // Número da OS — maior fonte que couber na largura
   var osTxt = (osNum && osNum !== '——') ? osNum : '';
   if (osTxt) {
-    var fs = 72;
+    var fs = 56;
     while (fs > 24) {
       ctx.font = 'bold ' + fs + 'px ' + FONT;
       if (ctx.measureText(osTxt).width <= TW) break;
       fs -= 2;
     }
     ctx.fillText(osTxt, TX, y);
-    y += Math.round(fs * 0.9) + 6;
+    y += Math.round(fs * 0.9) + 5;
   } else {
-    // Sem nº de OS: nome do cliente em até 3 linhas
+    // Sem nº de OS: nome do cliente em até 2 linhas
     var nome = refSemOS() || '—';
-    ctx.font = 'bold 26px ' + FONT;
+    ctx.font = 'bold 22px ' + FONT;
     var nl = [], nc = '';
     nome.split(' ').forEach(function(w) {
       var t = nc ? nc + ' ' + w : w;
       if (ctx.measureText(t).width <= TW || !nc) nc = t; else { nl.push(nc); nc = w; }
     });
     if (nc) nl.push(nc);
-    if (nl.length > 3) { nl = nl.slice(0, 3); nl[2] += '…'; }
+    if (nl.length > 2) { nl = nl.slice(0, 2); nl[1] += '…'; }
     nl.forEach(function(l) {
       while (l.length > 1 && ctx.measureText(l).width > TW) l = l.slice(0, -2) + '…';
-      ctx.fillText(l, TX, y); y += 29;
+      ctx.fillText(l, TX, y); y += 24;
     });
-    y += 4;
+    y += 3;
   }
 
   // Linha separadora
   ctx.fillRect(TX, y, TW, 2);
-  y += 9;
+  y += 7;
 
-  // Data no rodapé
-  var dfs = 16;
-  do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(dtTxt).width > TW && --dfs > 10);
+  // Dados da aba Dados
+  var R = {};
+  try { R = coletarRegistro(new Date()) || {}; } catch (_) { R = {}; }
+  var acTxt = R.semAcessorios ? 'Sem acessórios'
+    : ((R.acessorios && R.acessorios.length)
+        ? R.acessorios.map(function(a) { return (a.qtd && a.qtd !== '1' ? a.qtd + '× ' : '') + a.nome; }).join('; ')
+        : '');
+  var garTxt = R.garantia || '';
+  if (R.contribuinte === 'Sim') garTxt = (garTxt ? garTxt + ' · ' : '') + 'Contribuinte';
+  var rodape = dtTxt + (R.recebidoPor ? ' · ' + R.recebidoPor : '');
+
+  // Rodapé: data de entrada + quem recebeu
+  var dfs = 15;
+  do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW && --dfs > 10);
   ctx.textBaseline = 'bottom';
-  ctx.fillText(dtTxt, TX, PH - PAD);
+  ctx.fillText(rodape, TX, PH - PAD);
   ctx.textBaseline = 'top';
-  var yLimit = PH - PAD - 22;
+  var yLimit = PH - PAD - dfs - 3;
 
-  // Equipamento · série (quebra por caractere, reticências se não couber)
-  if (eqTxt) {
-    ctx.font = 'bold 18px ' + FONT;
-    var LH = 21;
-    var lines = [], cur = '';
-    var words = eqTxt.split(' ');
-    for (var wi = 0; wi < words.length; wi++) {
-      var w = words[wi];
-      var test = cur ? cur + ' ' + w : w;
-      if (ctx.measureText(test).width <= TW) { cur = test; continue; }
-      if (cur) { lines.push(cur); cur = ''; }
+  function quebrar(txt) {
+    var out = [], cur = '';
+    String(txt).split(' ').forEach(function(w) {
+      var t = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(t).width <= TW) { cur = t; return; }
+      if (cur) { out.push(cur); cur = ''; }
       while (ctx.measureText(w).width > TW) {
         var k = w.length;
         while (k > 1 && ctx.measureText(w.slice(0, k)).width > TW) k--;
-        lines.push(w.slice(0, k));
-        w = w.slice(k);
+        out.push(w.slice(0, k)); w = w.slice(k);
       }
       cur = w;
-    }
-    if (cur) lines.push(cur);
-    var maxLines = Math.max(1, Math.floor((yLimit - y) / LH));
-    if (lines.length > maxLines) {
-      lines = lines.slice(0, maxLines);
-      var last = lines[maxLines - 1];
-      while (last.length > 1 && ctx.measureText(last + '…').width > TW) last = last.slice(0, -1);
-      lines[maxLines - 1] = last + '…';
-    }
-    for (var li = 0; li < lines.length; li++) {
-      ctx.fillText(lines[li], TX, y);
-      y += LH;
-    }
+    });
+    if (cur) out.push(cur);
+    return out;
   }
+  function escrever(txt, font, LH, maxL) {
+    if (!txt || maxL < 1) return 0;
+    ctx.font = font;
+    var ls = quebrar(txt);
+    if (ls.length > maxL) {
+      ls = ls.slice(0, maxL);
+      var last = ls[maxL - 1];
+      while (last.length > 1 && ctx.measureText(last + '…').width > TW) last = last.slice(0, -1);
+      ls[maxL - 1] = last + '…';
+    }
+    ls.forEach(function(l) { ctx.fillText(l, TX, y); y += LH; });
+    return ls.length;
+  }
+
+  var LH = 17;
+  var livres = Math.max(0, Math.floor((yLimit - y) / LH));
+  var resGar = garTxt ? 1 : 0;
+  var resAc = acTxt ? 1 : 0;
+  // Equipamento · série: até 2 linhas, sem roubar a linha de acessórios e de garantia
+  livres -= escrever(eqTxt, 'bold 15px ' + FONT, LH, Math.min(2, livres - resGar - resAc));
+  // Acessórios: o que sobrar (menos a linha da garantia)
+  livres -= escrever(acTxt ? 'Acess.: ' + acTxt : '', 'bold 14px ' + FONT, LH, livres - resGar);
+  // Garantia (+ contribuinte)
+  escrever(garTxt, 'bold 14px ' + FONT, LH, Math.min(1, livres));
 }
 
 function downloadLabelPng() {
