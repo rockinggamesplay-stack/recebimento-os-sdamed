@@ -657,6 +657,15 @@ body {
     </select>
   </div>
   <div class="field">
+    <label>Cliente contribuinte? <span style="font-weight:400;color:#888;">(empresa que precisa enviar NF de remessa)</span></label>
+    <select id="f-contribuinte">
+      <option value="">Selecione...</option>
+      <option value="Não">Não</option>
+      <option value="Sim">Sim — contribuinte</option>
+      <option value="A verificar">A verificar</option>
+    </select>
+  </div>
+  <div class="field">
     <label>Observações gerais</label>
     <textarea id="f-obs" placeholder="(opcional)"></textarea>
   </div>
@@ -702,7 +711,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '2.7';
+var APP_VERSION = '2.8';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -1747,6 +1756,7 @@ function coletarRegistro(now) {
     semAcessorios: semAcess,
     acessorios: acess,
     garantia: g('f-garantia'),
+    contribuinte: g('f-contribuinte'),
     embalagem: g('f-embalagem'),
     conforme: g('f-conforme'),
     observacoes: g('f-obs'),
@@ -1978,12 +1988,20 @@ function resetForm() {
   renderGrid('videos');
   ['f-os','f-remetente','f-transportadora','eq1-modelo','eq1-serie','eq1-lote',
    'eq2-modelo','eq2-serie','eq2-lote','f-embalagem','f-conforme','f-obs',
-   'f-chegada','f-rastreio','f-nf','f-volumes','f-peso','f-garantia'].forEach(function(id){
+   'f-chegada','f-rastreio','f-nf','f-volumes','f-peso','f-garantia','f-contribuinte'].forEach(function(id){
     var el=document.getElementById(id); if(el){el.value='';}
   });
   var driveNote2 = document.getElementById('drive-note-2');
   if(driveNote2) driveNote2.textContent='Salva fotos, vídeos e resumo na pasta da OS no Drive';
   try { onChegadaChange(); } catch(_) {}
+  // limpa equipamentos extras e acessórios; volta "Sem acessórios" marcado; zera o nº da OS no topo/etiqueta
+  document.querySelectorAll('[id^="equip-card-eq"]').forEach(function(c){ c.remove(); });
+  equipCount = 1;
+  document.querySelectorAll('[id^="acess-card-"]').forEach(function(c){ c.remove(); });
+  acessCount = 0;
+  var cbSem = document.getElementById('cb-sem-acess');
+  if (cbSem) { cbSem.checked = true; toggleAcessorios(cbSem); }
+  try { updateHeaderOS(); } catch(_) {}
   switchTab('videos');
 }
 
