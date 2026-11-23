@@ -8,18 +8,22 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f4f4f4;color:#2
 table{width:100%;border-collapse:collapse;font-size:14px}
 th{text-align:left;color:#666;font-weight:normal;padding:6px 8px 6px 0;vertical-align:top;width:38%}
 td{padding:6px 0;border-bottom:1px solid #eee}
-a.bt{display:block;text-align:center;background:#CC0000;color:#fff;text-decoration:none;padding:12px;border-radius:6px;font-weight:bold;margin-top:10px}
-a.bt.sec{background:#424242}.aviso{font-size:13px;color:#666;margin-top:10px}
+.bt{display:block;width:100%;text-align:center;background:#CC0000;color:#fff;text-decoration:none;padding:12px;border:0;border-radius:6px;font-weight:bold;font-size:15px;margin-top:10px;cursor:pointer}
+.bt.sec{background:#424242}.aviso{font-size:13px;color:#666;margin-top:10px}
+#pdf canvas{width:100%;height:auto;display:block;margin:10px 0;box-shadow:0 1px 3px rgba(0,0,0,.25);background:#fff}
 </style></head>
 <body>
 <div class="top"><b>SDAMed · Recebimento</b><div id="sub">Carregando…</div></div>
 <div class="box" id="conteudo">Buscando o registro do recebimento…</div>
+<div class="box" id="pdfbox" style="display:none"><div id="pdfmsg"></div><div id="pdf"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
-// QR da etiqueta (app v3.0+): v.html?<OS>. Busca os dados no Apps Script SEM login (evita o erro de várias contas Google no celular).
+// QR da etiqueta (app v3.0+): v.html?<OS>. Página comum: não pede conta Google para ver os dados nem o relatório.
 var EXEC = "https://script.google.com/macros/s/AKfycbzOOu_u7pNqp_qdGtW3T1jiIJFc0SOAElbru3aN1EgsTRwF0kQF5fcJScL_IQPfCEqy/exec";
 var ref = decodeURIComponent(location.search.slice(1) || "");
 function esc(t){ return String(t == null ? "" : t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 var box = document.getElementById("conteudo"), sub = document.getElementById("sub");
+var pdfBox = document.getElementById("pdfbox"), pdfMsg = document.getElementById("pdfmsg"), pdfDiv = document.getElementById("pdf");
 sub.textContent = ref ? "OS " + ref : "";
 fetch(EXEC + "?f=json&v=" + encodeURIComponent(ref), { credentials: "omit" })
   .then(function(r){ return r.json(); })
@@ -31,14 +35,45 @@ fetch(EXEC + "?f=json&v=" + encodeURIComponent(ref), { credentials: "omit" })
     }
     sub.textContent = "OS " + d.os;
     var h = "<table>" + d.campos.map(function(c){ return "<tr><th>" + esc(c[0]) + "</th><td>" + esc(c[1]) + "</td></tr>"; }).join("") + "</table>";
-    if (d.pdf) h += "<a class='bt' href='" + esc(d.pdf) + "' target='_blank'>📄 Abrir relatório de recebimento (PDF)</a>";
-    else h += "<p class='aviso'>O relatório em PDF é gerado alguns minutos depois do registro.</p>";
-    if (d.pasta) h += "<a class='bt sec' href='https://drive.google.com/drive/folders/" + esc(d.pasta) + "' target='_blank'>📁 Fotos e vídeos no Drive</a>";
-    h += "<p class='aviso'>PDF e pasta abrem só para quem tem acesso ao Drive da SDAMed.</p>";
+    if (d.pdf) h += "<button class='bt' id='btpdf'>📄 Ver relatório de recebimento (com fotos)</button>";
+    else h += "<p class='aviso'>O relatório com fotos é gerado alguns minutos depois do registro. Volte mais tarde.</p>";
     box.innerHTML = h;
+    var b = document.getElementById("btpdf");
+    if (b) b.onclick = function(){ b.disabled = true; b.textContent = "Carregando relatório…"; verPdf(b); };
   })
   .catch(function(){
     box.innerHTML = "<b>Não foi possível carregar agora.</b><p class='aviso'>Verifique a internet e tente de novo.</p>";
   });
+
+function verPdf(b) {
+  pdfBox.style.display = "block"; pdfMsg.textContent = "Carregando relatório…"; pdfDiv.innerHTML = "";
+  fetch(EXEC + "?f=pdf&v=" + encodeURIComponent(ref), { credentials: "omit" })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d || !d.ok || !d.b64) throw new Error("sem pdf");
+      var bin = atob(d.b64), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      pdfMsg.innerHTML = "<a class='bt sec' href='" + url + "' download='" + esc(d.nome || "Relatorio_Recebimento.pdf") + "'>⬇️ Baixar o PDF</a>";
+      b.style.display = "none";
+      if (!window.pdfjsLib) return;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      return pdfjsLib.getDocument({ data: bytes }).promise.then(function(pdf){
+        var p = Promise.resolve();
+        for (var n = 1; n <= pdf.numPages; n++) (function(n){
+          p = p.then(function(){ return pdf.getPage(n); }).then(function(page){
+            var vp = page.getViewport({ scale: 2 }), c = document.createElement("canvas");
+            c.width = vp.width; c.height = vp.height; pdfDiv.appendChild(c);
+            return page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+          });
+        })(n);
+        return p;
+      });
+    })
+    .catch(function(){
+      pdfMsg.innerHTML = "<p class='aviso'>Não foi possível carregar o relatório agora. Tente de novo em alguns minutos.</p>";
+      b.disabled = false; b.textContent = "📄 Ver relatório de recebimento (com fotos)";
+    });
+}
 </script>
 </body></html>
