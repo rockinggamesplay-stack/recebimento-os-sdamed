@@ -537,7 +537,8 @@ body {
   <div class="field">
     <label>Número da OS <span class="req">*</span></label>
     <input type="number" id="f-os" placeholder="Ex: 6123"
-           inputmode="numeric" oninput="updateHeaderOS()">
+           inputmode="numeric" oninput="updateHeaderOS()" onchange="verificarOSExistente()">
+    <div id="aviso-os" style="display:none;margin-top:6px;padding:8px 10px;border-radius:6px;background:#fff3e0;color:#e65100;font-size:13px;"></div>
   </div>
   <div class="field">
     <label>Nome do Remetente <span class="req">*</span></label>
@@ -719,7 +720,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '3.4';
+var APP_VERSION = '3.5';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -2043,6 +2044,23 @@ async function doSaveToDrive(btnId, noteId) {
 }
 
 
+// v3.5: avisa se já existe pasta com este nº de OS (outro volume ou número digitado errado). Não trava nada.
+function verificarOSExistente() {
+  var el = document.getElementById('f-os'), av = document.getElementById('aviso-os');
+  if (!el || !av) return;
+  var os = el.value.trim();
+  av.style.display = 'none'; av.textContent = '';
+  if (!os) return;
+  gasCall({action: 'checkOS', os: os}).then(function(d) {
+    if (el.value.trim() !== os) return;
+    var ex = (d.result && d.result.existentes) || [];
+    if (!ex.length) return;
+    av.innerHTML = '⚠️ Já existe registro da <b>OS ' + os + '</b> (pasta criada em ' + ex.map(function(x) { return x.criada; }).join(', ') + ').<br>' +
+      'Se for <b>outro volume</b> do mesmo cliente, pode continuar: vai para a mesma pasta. Se não, confira o número.';
+    av.style.display = '';
+  }).catch(function() {});
+}
+
 // ── v3.4: vídeo vai subindo para o Drive ENQUANTO grava (arquivo único, sem cortes) ──
 // Sobe numa pasta temporária "_videos em envio"; ao salvar a OS o app termina o envio e move o vídeo para a pasta da OS.
 function iniciarEnvioAoVivo(rec) {
@@ -2242,6 +2260,7 @@ function resetForm() {
   var cbSem = document.getElementById('cb-sem-acess');
   if (cbSem) { cbSem.checked = true; toggleAcessorios(cbSem); }
   try { toggleNfRemessa(); } catch(_) {}
+  var avOs = document.getElementById('aviso-os'); if (avOs) avOs.style.display = 'none';
   try { updateHeaderOS(); } catch(_) {}
   switchTab('videos');
 }
