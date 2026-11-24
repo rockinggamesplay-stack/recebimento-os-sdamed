@@ -720,7 +720,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '3.6';
+var APP_VERSION = '3.7';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -1103,42 +1103,30 @@ function updateQR() {
 function printLabel() {
   updateLabel();
   var heightMm = labelSizeMm === 40 ? '40mm' : '30mm';
-
-  // Captura o QR code canvas como imagem (evita perder o canvas ao clonar)
-  var qrCanvas = document.querySelector('#label-qr canvas');
-  var qrSrc = qrCanvas ? qrCanvas.toDataURL('image/png') : '';
-  var qrPx   = qrCanvas ? Math.min(qrCanvas.width, 100) : 0;
-
-  // Lê textos do label
-  var osNum   = (document.getElementById('lbl-os-num')  || {}).textContent || '——';
-  var dateTxt = (document.getElementById('lbl-date')    || {}).textContent || '';
-  var eqTxt   = (document.getElementById('lbl-equip')   || {}).textContent || '';
-
-  // QR ocupa ~40% da largura (50mm) → ~18mm; para 50×30 fica mais justo
-  var qrMm = labelSizeMm === 40 ? '18mm' : '15mm';
+  // v3.7: imprime pelo navegador EXATAMENTE a mesma etiqueta da impressão Bluetooth (mesmo desenho renderLabelCanvas)
+  var PH = labelSizeMm === 30 ? 230 : 307, ESC = 3;
+  var cvP = document.createElement('canvas');
+  cvP.width = 384 * ESC; cvP.height = PH * ESC;
+  var cxP = cvP.getContext('2d');
+  cxP.scale(ESC, ESC);
+  renderLabelCanvas(cxP, 384, PH);
+  // preto e branco puro, como sai na Niimbot
+  var idP = cxP.getImageData(0, 0, cvP.width, cvP.height), pxP = idP.data;
+  for (var ip = 0; ip < pxP.length; ip += 4) {
+    var gP = 0.299 * pxP[ip] + 0.587 * pxP[ip + 1] + 0.114 * pxP[ip + 2], vP = gP < 128 ? 0 : 255;
+    pxP[ip] = pxP[ip + 1] = pxP[ip + 2] = vP; pxP[ip + 3] = 255;
+  }
+  cxP.putImageData(idP, 0, 0);
+  var imgSrc = cvP.toDataURL('image/png');
 
   var ifrHtml =
     '<!DOCTYPE html><html><head><meta charset="utf-8">' +
     '<style>' +
     '@page{size:50mm '+heightMm+';margin:0}' +
-    'body{margin:0;padding:0;width:50mm;height:'+heightMm+';overflow:hidden}' +
-    '.lbl{display:flex;flex-direction:row;align-items:center;' +
-         'width:50mm;height:'+heightMm+';padding:1.5mm;gap:2mm;' +
-         'box-sizing:border-box;background:#fff;font-family:Arial,sans-serif}' +
-    '.qr{flex-shrink:0;width:'+qrMm+';height:'+qrMm+'}' +
-    '.qr img{display:block;width:100%;height:100%;object-fit:contain}' +
-    '.inf{flex:1;min-width:0;overflow:hidden}' +
-    '.os{font-size:11px;font-weight:900;letter-spacing:.5px}' +
-    '.dt{font-size:9px;color:#333;margin-top:1px}' +
-    '.eq{font-size:8px;color:#555;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    'html,body{margin:0;padding:0;width:50mm;height:'+heightMm+';overflow:hidden;background:#fff}' +
+    'img{display:block;width:50mm;height:'+heightMm+';object-fit:contain;image-rendering:pixelated}' +
     '</style></head><body>' +
-    '<div class="lbl">' +
-    (qrSrc ? '<div class="qr"><img src="'+qrSrc+'"></div>' : '') +
-    '<div class="inf">' +
-    '<div class="os">OS '+osNum+'</div>' +
-    '<div class="dt">'+dateTxt+'</div>' +
-    '<div class="eq">'+eqTxt+'</div>' +
-    '</div></div>' +
+    '<img src="'+imgSrc+'">' +
     '</body></html>';
 
   // Cria iframe oculto — sem mexer no DOM visível
