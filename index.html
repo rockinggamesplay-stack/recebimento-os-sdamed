@@ -719,7 +719,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '3.2';
+var APP_VERSION = '3.3';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -948,6 +948,7 @@ function renderGrid(type) {
     grid.appendChild(wrap);
     grid.appendChild(info);
   });
+  sincronizarMidia(type);
 }
 
 function removeMedia(type, idx) {
@@ -1843,11 +1844,22 @@ var UPLOAD_CHUNK = 8 * 1024 * 1024; // múltiplo de 256 KB (exigência do Google
 async function blobToB64(blob) {
   return arrToB64(new Uint8Array(await blob.arrayBuffer()));
 }
-async function gasUploadGrande(name, blob, mime, folderId, onProg) {
-  var st = await gasCall({action: 'uploadStart', folderId: folderId, fileName: name, mimeType: mime, size: blob.size});
-  var url = st.result.uploadUrl;
-  if (!url) throw new Error('Drive não abriu o envio em partes');
-  var start = 0;
+async function gasUploadGrande(name, blob, mime, folderId, onProg, item) {
+  // v3.3: envio retomável — se cair no meio, continua de onde parou (inclusive depois de atualizar a página)
+  var url = item && item.upUrl, start = 0;
+  if (url) {
+    try {
+      var s0 = await gasCall({action: 'uploadStatus', uploadUrl: url, total: blob.size});
+      if (s0.result.done) { if (onProg) onProg(1); return s0.result; }
+      start = s0.result.next || 0;
+    } catch (e0) { url = null; start = 0; }
+  }
+  if (!url) {
+    var st = await gasCall({action: 'uploadStart', folderId: folderId, fileName: name, mimeType: mime, size: blob.size});
+    url = st.result.uploadUrl;
+    if (!url) throw new Error('Drive não abriu o envio em partes');
+    if (item) { item.upUrl = url; item.upNext = 0; salvarRascunhoLogo(); }
+  }
   while (start < blob.size) {
     var end = Math.min(start + UPLOAD_CHUNK, blob.size);
     var b64 = await blobToB64(blob.slice(start, end));
@@ -1857,20 +1869,30 @@ async function gasUploadGrande(name, blob, mime, folderId, onProg) {
         r = await gasCall({action: 'uploadChunk', uploadUrl: url, base64: b64, start: start, total: blob.size, mimeType: mime});
         break;
       } catch (e) {
-        if (++tries >= 3) throw e;
-        await new Promise(function(res) { setTimeout(res, 2000 * tries); });
+        if (++tries >= 6) throw e;
+        await new Promise(function(res) { setTimeout(res, 3000 * tries); });
+        // pergunta ao Drive quanto já chegou e continua dali
+        try {
+          var sq = await gasCall({action: 'uploadStatus', uploadUrl: url, total: blob.size});
+          if (sq.result.done) { if (onProg) onProg(1); return sq.result; }
+          if (typeof sq.result.next === 'number' && sq.result.next !== start) {
+            start = sq.result.next; end = Math.min(start + UPLOAD_CHUNK, blob.size);
+            b64 = await blobToB64(blob.slice(start, end));
+          }
+        } catch (_) {}
       }
     }
     if (r.result.done) { if (onProg) onProg(1); return r.result; }
     start = (typeof r.result.next === 'number') ? r.result.next : end;
+    if (item) { item.upNext = start; salvarRascunhoLogo(); }
     if (onProg) onProg(start / blob.size);
   }
   return {};
 }
 // Envia um vídeo: em partes; se o servidor ainda não tiver essa função, tenta do jeito antigo
-async function enviarVideo(name, blob, mime, folderId, onProg) {
+async function enviarVideo(name, blob, mime, folderId, onProg, item) {
   try {
-    return await gasUploadGrande(name, blob, mime, folderId, onProg);
+    return await gasUploadGrande(name, blob, mime, folderId, onProg, item);
   } catch (e) {
     if (String(e.message || e).indexOf('Acao desconhecida') >= 0) {
       return await gasUploadB64(name, await blobToB64(blob), mime, folderId);
@@ -1894,6 +1916,7 @@ async function doSaveToDrive(btnId, noteId) {
   var btn=document.getElementById(btnId), note=document.getElementById(noteId);
   var osNum=document.getElementById('f-os').value.trim();
   btn.textContent='⏳ Salvando...'; btn.disabled=true;
+  manterTelaAcesa();
   note.textContent='Criando pastas no Drive...';
   // state.salvo guarda o que já subiu: se tentar de novo, não duplica fotos/resumo
   var sv = state.salvo || (state.salvo = {});
@@ -1935,6 +1958,7 @@ async function doSaveToDrive(btnId, noteId) {
       var pTs=pNow.getFullYear()+String(pNow.getMonth()+1).padStart(2,'0')+String(pNow.getDate()).padStart(2,'0')+'_'+String(pNow.getHours()).padStart(2,'0')+String(pNow.getMinutes()).padStart(2,'0')+String(pNow.getSeconds()+i).padStart(2,'0');
       await gasUploadB64('ordem de servico '+pTs+' - SDAMed.jpg', b64, 'image/jpeg', recId);
       fo.enviado = true;
+      salvarRascunhoLogo();
     }
     // Videos — um vídeo com problema não impede o resto de salvar
     var falhasVideo = [];
@@ -1953,8 +1977,9 @@ async function doSaveToDrive(btnId, noteId) {
         })(i, vMB);
         await enviarVideo('ordem de servico '+vTs+' - SDAMed'+vExt, vBlob, vMime, recId, (function(idx, mb){
           return function(p){ note.textContent='Enviando vídeo '+(idx+1)+' de '+state.videos.length+' ('+mb+' MB) — '+Math.round(p*100)+'%'; };
-        })(i, vMB));
+        })(i, vMB), vi);
         vi.enviado = true;
+        salvarRascunhoLogo();
       } catch(ve) {
         console.error('[video]', ve);
         falhasVideo.push((i+1) + ' (' + (ve.message || ve) + ')');
@@ -2008,9 +2033,146 @@ async function doSaveToDrive(btnId, noteId) {
 }
 
 
+// ── v3.3: Rascunho automático — atualizar/fechar a página não perde a entrada ──
+// Campos ficam no localStorage; fotos e vídeos no IndexedDB do próprio celular. Apaga sozinho depois de salvar no Drive.
+var RASC_KEY = 'rascunhoRecebimento', rascRestaurando = false, rascTimer = null;
+function rascDb() {
+  return new Promise(function(res, rej) {
+    var rq = indexedDB.open('recebimentoRascunho', 1);
+    rq.onupgradeneeded = function() { rq.result.createObjectStore('midia', { autoIncrement: true }); };
+    rq.onsuccess = function() { res(rq.result); };
+    rq.onerror = function() { rej(rq.error); };
+  });
+}
+function rascIdb(modo, fn) {
+  return rascDb().then(function(db) {
+    return new Promise(function(res, rej) {
+      var tx = db.transaction('midia', modo), st = tx.objectStore('midia'), out = fn(st);
+      tx.oncomplete = function() { res(out && out.result !== undefined ? out.result : undefined); };
+      tx.onerror = function() { rej(tx.error); };
+      tx.onabort = function() { rej(tx.error); };
+    });
+  });
+}
+function salvarRascunhoLogo() {
+  if (rascRestaurando) return;
+  clearTimeout(rascTimer);
+  rascTimer = setTimeout(salvarRascunhoAgora, 400);
+}
+function salvarRascunhoAgora() {
+  if (rascRestaurando) return;
+  try {
+    var campos = {};
+    document.querySelectorAll('input[id], select[id], textarea[id]').forEach(function(el) {
+      if (el.type === 'file' || el.id === 'f-recebedor') return;
+      campos[el.id] = (el.type === 'checkbox') ? !!el.checked : el.value;
+    });
+    var meta = function(t) { return state[t].map(function(it) {
+      return { k: it.dbKey, name: it.name, compKB: it.compKB, origKB: it.origKB, sizeKB: it.sizeKB,
+               enviado: !!it.enviado, upUrl: it.upUrl || '', upNext: it.upNext || 0 };
+    }); };
+    localStorage.setItem(RASC_KEY, JSON.stringify({
+      t: Date.now(), campos: campos, equipCount: equipCount, acessCount: acessCount, chave: CHAVE_QR,
+      salvo: state.salvo || null, fotos: meta('fotos'), videos: meta('videos')
+    }));
+  } catch (e) { console.warn('[rascunho]', e); }
+}
+// Guarda no aparelho as fotos/vídeos novos e apaga os removidos
+function sincronizarMidia(type) {
+  if (rascRestaurando || !window.indexedDB) { salvarRascunhoLogo(); return; }
+  var itens = state[type].slice(), p = Promise.resolve();
+  itens.forEach(function(it) {
+    if (it.dbKey || it.dbSalvando) return;
+    it.dbSalvando = true;
+    p = p.then(function() {
+      return (type === 'fotos' ? Promise.resolve(it.dataUrl) : fetch(it.url).then(function(r) { return r.blob(); }))
+        .then(function(dado) { return rascIdb('readwrite', function(st) { return st.add({ type: type, dado: dado }); }); })
+        .then(function(k) { it.dbKey = k; })
+        .catch(function(e) { console.warn('[rascunho] mídia não guardada', e); })
+        .then(function() { it.dbSalvando = false; });
+    });
+  });
+  p.then(function() {
+    var r = null; try { r = JSON.parse(localStorage.getItem(RASC_KEY) || 'null'); } catch (_) {}
+    var antigas = r && r[type] ? r[type].map(function(m) { return m.k; }) : [];
+    var atuais = state[type].map(function(it) { return it.dbKey; });
+    var apagar = antigas.filter(function(k) { return k && atuais.indexOf(k) < 0; });
+    salvarRascunhoAgora();
+    if (apagar.length) return rascIdb('readwrite', function(st) { apagar.forEach(function(k) { st.delete(k); }); });
+  }).catch(function(e) { console.warn('[rascunho]', e); });
+}
+function limparRascunho() {
+  clearTimeout(rascTimer);
+  try { localStorage.removeItem(RASC_KEY); } catch (_) {}
+  try { if (window.indexedDB) rascIdb('readwrite', function(st) { st.clear(); }).catch(function() {}); } catch (_) {}
+  var b = document.getElementById('aviso-rascunho'); if (b) b.remove();
+}
+function restaurarRascunho() {
+  var r = null; try { r = JSON.parse(localStorage.getItem(RASC_KEY) || 'null'); } catch (_) {}
+  if (!r) return;
+  var temCampo = ['f-os', 'f-remetente', 'eq1-modelo', 'eq1-serie', 'f-obs', 'f-garantia', 'f-embalagem'].some(function(k) {
+    return r.campos && typeof r.campos[k] === 'string' && r.campos[k].trim() !== '';
+  });
+  if (!temCampo && !(r.fotos || []).length && !(r.videos || []).length) return;
+  rascRestaurando = true;
+  try {
+    for (var i = equipCount; i < (r.equipCount || 1); i++) addEquipamento();
+    for (var j = acessCount; j < (r.acessCount || 0); j++) addAcessorio();
+    Object.keys(r.campos || {}).forEach(function(id) {
+      var el = document.getElementById(id); if (!el) return;
+      if (el.type === 'checkbox') el.checked = !!r.campos[id]; else el.value = r.campos[id];
+    });
+    var cb = document.getElementById('cb-sem-acess'); if (cb) toggleAcessorios(cb);
+    try { toggleNfRemessa(); } catch (_) {}
+    try { onChegadaChange(); } catch (_) {}
+    if (r.chave) CHAVE_QR = r.chave;
+    if (r.salvo) state.salvo = r.salvo;
+    try { updateHeaderOS(); } catch (_) {}
+  } finally { rascRestaurando = false; }
+  var osTxt = (r.campos && r.campos['f-os']) ? 'OS ' + r.campos['f-os'] : 'entrada sem nº de OS';
+  var av = document.createElement('div');
+  av.id = 'aviso-rascunho';
+  av.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:9999;background:#1b5e20;color:#fff;padding:10px 12px;' +
+    'border-radius:8px;font:14px Arial,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;gap:8px;align-items:center';
+  av.innerHTML = '<span style="flex:1">✅ Recuperamos a ' + osTxt + ' que estava em andamento.</span>' +
+    '<button id="rasc-ok" style="background:#fff;color:#1b5e20;border:0;border-radius:6px;padding:6px 10px;font-weight:bold">OK</button>' +
+    '<button id="rasc-desc" style="background:transparent;color:#fff;border:1px solid #fff;border-radius:6px;padding:6px 10px">Descartar</button>';
+  document.body.appendChild(av);
+  document.getElementById('rasc-ok').onclick = function() { av.remove(); };
+  document.getElementById('rasc-desc').onclick = function() { limparRascunho(); resetForm(); };
+  if (!window.indexedDB) return;
+  rascDb().then(function(db) {
+    return new Promise(function(res) {
+      var out = {}, cur = db.transaction('midia', 'readonly').objectStore('midia').openCursor();
+      cur.onsuccess = function() { var c = cur.result; if (c) { out[c.key] = c.value; c.continue(); } else res(out); };
+      cur.onerror = function() { res(out); };
+    });
+  }).then(function(todos) {
+    ['fotos', 'videos'].forEach(function(type) {
+      (r[type] || []).forEach(function(m) {
+        var reg = m.k && todos[m.k]; if (!reg) return;
+        var it = { name: m.name, dbKey: m.k, enviado: m.enviado, upUrl: m.upUrl, upNext: m.upNext };
+        if (type === 'fotos') { it.dataUrl = reg.dado; it.compKB = m.compKB; it.origKB = m.origKB; }
+        else { it.url = URL.createObjectURL(reg.dado); it.sizeKB = m.sizeKB; }
+        state[type].push(it);
+      });
+      renderGrid(type);
+    });
+  }).catch(function(e) { console.warn('[rascunho] mídia não recuperada', e); });
+}
+document.addEventListener('input', salvarRascunhoLogo, true);
+document.addEventListener('change', salvarRascunhoLogo, true);
+// Mantém a tela acesa enquanto envia (tela apagada = celular pausa o envio do vídeo)
+var telaAcesa = null;
+function manterTelaAcesa() {
+  try { if (navigator.wakeLock && !telaAcesa) navigator.wakeLock.request('screen').then(function(w) { telaAcesa = w; w.addEventListener('release', function() { telaAcesa = null; }); }).catch(function() {}); } catch (_) {}
+}
+function liberarTela() { try { if (telaAcesa) telaAcesa.release(); } catch (_) {} telaAcesa = null; }
+
 function resetForm() {
   state.salvo = null;
   CHAVE_QR = novaChaveQR();
+  limparRascunho(); liberarTela();
   state.fotos = [];
   state.videos = [];
   renderGrid('fotos');
@@ -2045,6 +2207,7 @@ function resetForm() {
   updateQR();
   loadFromURL();
   try { var rb = localStorage.getItem('recebedor'); if (rb) document.getElementById('f-recebedor').value = rb; } catch(_) {}
+  try { restaurarRascunho(); } catch(e) { console.warn('[rascunho]', e); }
 })();
 
 
