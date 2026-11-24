@@ -658,11 +658,19 @@ body {
   </div>
   <div class="field">
     <label>Cliente contribuinte? <span style="font-weight:400;color:#888;">(empresa que precisa enviar NF de remessa)</span></label>
-    <select id="f-contribuinte">
+    <select id="f-contribuinte" onchange="toggleNfRemessa()">
       <option value="">Selecione...</option>
       <option value="Não">Não</option>
       <option value="Sim">Sim — contribuinte</option>
       <option value="A verificar">A verificar</option>
+    </select>
+  </div>
+  <div class="field" id="box-nfremessa" style="display:none;">
+    <label>Contribuinte: a NF de remessa (reparo) veio junto?</label>
+    <select id="f-nfremessa">
+      <option value="">Selecione...</option>
+      <option value="Sim">Sim — veio a NF</option>
+      <option value="Não">Não — precisa cobrar a NF</option>
     </select>
   </div>
   <div class="field">
@@ -711,7 +719,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '3.1';
+var APP_VERSION = '3.2';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -734,6 +742,14 @@ function novaChaveQR() {
   try { crypto.getRandomValues(r); } catch (_) { for (var k = 0; k < 6; k++) r[k] = Math.floor(Math.random() * 256); }
   for (var i = 0; i < 6; i++) s += a[r[i] % a.length];
   return s;
+}
+// v3.2: pergunta da NF de remessa só aparece quando o cliente é contribuinte
+function toggleNfRemessa() {
+  var c = document.getElementById('f-contribuinte'), b = document.getElementById('box-nfremessa');
+  if (!c || !b) return;
+  var mostra = c.value === 'Sim';
+  b.style.display = mostra ? '' : 'none';
+  if (!mostra) { var n = document.getElementById('f-nfremessa'); if (n) n.value = ''; }
 }
 var CHAVE_QR = novaChaveQR();
 var state = {
@@ -1768,6 +1784,7 @@ function coletarRegistro(now) {
     garantia: g('f-garantia'),
     contribuinte: g('f-contribuinte'),
     chaveQR: CHAVE_QR,
+    nfRemessa: g('f-contribuinte') === 'Sim' ? g('f-nfremessa') : '',
     embalagem: g('f-embalagem'),
     conforme: g('f-conforme'),
     observacoes: g('f-obs'),
@@ -2000,7 +2017,7 @@ function resetForm() {
   renderGrid('videos');
   ['f-os','f-remetente','f-transportadora','eq1-modelo','eq1-serie','eq1-lote',
    'eq2-modelo','eq2-serie','eq2-lote','f-embalagem','f-conforme','f-obs',
-   'f-chegada','f-rastreio','f-nf','f-volumes','f-peso','f-garantia','f-contribuinte'].forEach(function(id){
+   'f-chegada','f-rastreio','f-nf','f-volumes','f-peso','f-garantia','f-contribuinte','f-nfremessa'].forEach(function(id){
     var el=document.getElementById(id); if(el){el.value='';}
   });
   var driveNote2 = document.getElementById('drive-note-2');
@@ -2013,6 +2030,7 @@ function resetForm() {
   acessCount = 0;
   var cbSem = document.getElementById('cb-sem-acess');
   if (cbSem) { cbSem.checked = true; toggleAcessorios(cbSem); }
+  try { toggleNfRemessa(); } catch(_) {}
   try { updateHeaderOS(); } catch(_) {}
   switchTab('videos');
 }
@@ -2120,7 +2138,8 @@ function renderLabelCanvas(ctx, PW, PH) {
         ? R.acessorios.map(function(a) { return (a.qtd && a.qtd !== '1' ? a.qtd + '× ' : '') + a.nome; }).join('; ')
         : '');
   var garTxt = R.garantia || '';
-  if (R.contribuinte === 'Sim') garTxt = (garTxt ? garTxt + ' · ' : '') + 'Contribuinte';
+  if (R.contribuinte === 'Sim') garTxt = (garTxt ? garTxt + ' · ' : '') + 'Contribuinte' +
+    (R.nfRemessa === 'Não' ? ' · SEM NF' : R.nfRemessa === 'Sim' ? ' · NF ok' : '');
   var rodape = dtTxt + (R.recebidoPor ? ' · ' + R.recebidoPor : '');
 
   // Rodapé: data de entrada + quem recebeu
@@ -2162,7 +2181,7 @@ function renderLabelCanvas(ctx, PW, PH) {
   }
 
   var LH = 16;
-  var resGar = garTxt ? 1 : 0;
+  var resGar = garTxt ? (R.contribuinte === 'Sim' ? 2 : 1) : 0;
   var resAc = acTxt ? 1 : 0;
   // Equipamento · série (negrito): até 2 linhas, sem roubar a linha de acessórios e de garantia
   var livEq = Math.floor((yLimit - y - (resGar + resAc) * LH) / 18);
@@ -2171,7 +2190,7 @@ function renderLabelCanvas(ctx, PW, PH) {
   // Abaixo do equipamento: fonte menor, sem negrito
   var livres = Math.max(0, Math.floor((yLimit - y) / LH));
   livres -= escrever(acTxt ? 'Acess.: ' + acTxt : '', '13px ' + FONT, LH, livres - resGar);
-  escrever(garTxt, '13px ' + FONT, LH, Math.min(1, livres));
+  escrever(garTxt, '13px ' + FONT, LH, Math.min(resGar, livres));
 }
 
 function downloadLabelPng() {
