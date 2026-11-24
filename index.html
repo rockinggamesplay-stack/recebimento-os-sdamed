@@ -719,7 +719,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '3.3';
+var APP_VERSION = '3.4';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -1454,8 +1454,10 @@ function toggleRecording() {
       catch(e2) { stopStampedStream(); mediaRecorder = new MediaRecorder(camStream); }
     }
 
+    var liveUp = null;
+    try { liveUp = iniciarEnvioAoVivo(mediaRecorder); } catch (eLv) { liveUp = null; }
     mediaRecorder.ondataavailable = function(e) {
-      if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+      if (e.data && e.data.size > 0) { recordedChunks.push(e.data); if (liveUp) liveUp.alimentar(e.data); }
     };
 
     mediaRecorder.onstop = function() {
@@ -1466,7 +1468,7 @@ function toggleRecording() {
       var sizeKB = Math.round(blob.size / 1024);
       var vNow = new Date();
       var vTs = vNow.getFullYear()+String(vNow.getMonth()+1).padStart(2,'0')+String(vNow.getDate()).padStart(2,'0')+'_'+String(vNow.getHours()).padStart(2,'0')+String(vNow.getMinutes()).padStart(2,'0')+String(vNow.getSeconds()).padStart(2,'0');
-      pendingCapture = { type:'videos', url:url, name:'video_'+vTs+(mime.indexOf('mp4')>=0?'.mp4':'.webm'), sizeKB:sizeKB };
+      pendingCapture = { type:'videos', url:url, name:'video_'+vTs+(mime.indexOf('mp4')>=0?'.mp4':'.webm'), sizeKB:sizeKB, live: liveUp };
       var pov = document.getElementById('media-prev-overlay');
       document.getElementById('media-prev-img').style.display = 'none';
       document.getElementById('media-prev-img').src = '';
@@ -1480,7 +1482,7 @@ function toggleRecording() {
       recordedChunks = [];
     };
 
-    mediaRecorder.start();
+    mediaRecorder.start(3000); // partes a cada 3 s: vão subindo enquanto grava
     btn.textContent = '⏹';
     btn.classList.add('recording');
     recLabel.style.display = 'block';
@@ -1507,7 +1509,9 @@ function confirmMedia() {
     ctr.textContent = camPhotoCount + (camPhotoCount === 1 ? ' foto' : ' fotos');
     ctr.style.display = 'block';
   } else {
-    state.videos.push({ url: pendingCapture.url, name: pendingCapture.name, sizeKB: pendingCapture.sizeKB });
+    var vItem = { url: pendingCapture.url, name: pendingCapture.name, sizeKB: pendingCapture.sizeKB };
+    if (pendingCapture.live) { vItem.live = pendingCapture.live; pendingCapture.live.ligarItem(vItem); }
+    state.videos.push(vItem);
     renderGrid('videos');
     if (camStream) { camStream.getTracks().forEach(function(t){ t.stop(); }); camStream = null; }
     document.getElementById('cam-video').srcObject = null;
@@ -1975,9 +1979,15 @@ async function doSaveToDrive(btnId, noteId) {
         (function(idx, mb){
           note.textContent='Enviando vídeo '+(idx+1)+' de '+state.videos.length+' ('+mb+' MB)...';
         })(i, vMB);
-        await enviarVideo('ordem de servico '+vTs+' - SDAMed'+vExt, vBlob, vMime, recId, (function(idx, mb){
+        if (vi.live) { try { await vi.live.aguardar(); } catch(_) {} }
+        var vNome = 'ordem de servico '+vTs+' - SDAMed'+vExt;
+        var vRes = await enviarVideo(vNome, vBlob, vMime, recId, (function(idx, mb){
           return function(p){ note.textContent='Enviando vídeo '+(idx+1)+' de '+state.videos.length+' ('+mb+' MB) — '+Math.round(p*100)+'%'; };
         })(i, vMB), vi);
+        if (vi.temp && vRes && vRes.fileId) {
+          note.textContent='Colocando o vídeo '+(i+1)+' na pasta da OS...';
+          await gasCall({action: 'moveFile', fileId: vRes.fileId, folderId: recId, name: vNome});
+        }
         vi.enviado = true;
         salvarRascunhoLogo();
       } catch(ve) {
@@ -2033,6 +2043,45 @@ async function doSaveToDrive(btnId, noteId) {
 }
 
 
+// ── v3.4: vídeo vai subindo para o Drive ENQUANTO grava (arquivo único, sem cortes) ──
+// Sobe numa pasta temporária "_videos em envio"; ao salvar a OS o app termina o envio e move o vídeo para a pasta da OS.
+function iniciarEnvioAoVivo(rec) {
+  var lv = { url: null, sent: 0, pend: [], pendBytes: 0, sending: null, parado: false, item: null };
+  var mime = String(rec.mimeType || 'video/webm').split(';')[0];
+  var n = new Date(), p2 = function(x) { return String(x).padStart(2, '0'); };
+  lv.nome = 'video_em_envio_' + n.getFullYear() + p2(n.getMonth() + 1) + p2(n.getDate()) + '_' + p2(n.getHours()) + p2(n.getMinutes()) + p2(n.getSeconds()) +
+    (mime.indexOf('mp4') >= 0 ? '.mp4' : '.webm');
+  function enviar() {
+    if (lv.parado || !lv.url || lv.sending || lv.pendBytes < UPLOAD_CHUNK) return;
+    var tudo = new Blob(lv.pend), parte = tudo.slice(0, UPLOAD_CHUNK), start = lv.sent;
+    lv.pend = [tudo.slice(UPLOAD_CHUNK)]; lv.pendBytes -= UPLOAD_CHUNK;
+    lv.sending = blobToB64(parte)
+      .then(function(b64) { return gasCall({action: 'uploadChunk', uploadUrl: lv.url, base64: b64, start: start, mimeType: mime}); })
+      .then(function(r) {
+        lv.sent = (r.result && typeof r.result.next === 'number') ? r.result.next : start + UPLOAD_CHUNK;
+        if (lv.sent !== start + UPLOAD_CHUNK) lv.parado = true; // o resto é acertado ao salvar
+        if (lv.item) { lv.item.upNext = lv.sent; salvarRascunhoLogo(); }
+      })
+      .catch(function(e) { console.warn('[vídeo ao vivo] parte não subiu — termina ao salvar', e); lv.parado = true; })
+      .then(function() { lv.sending = null; enviar(); });
+  }
+  lv.alimentar = function(b) { lv.pend.push(b); lv.pendBytes += b.size; enviar(); };
+  lv.aguardar = function() { lv.parado = true; return lv.sending || Promise.resolve(); };
+  lv.ligarItem = function(it) {
+    lv.item = it;
+    if (lv.url) { it.upUrl = lv.url; it.temp = true; it.upNext = lv.sent; salvarRascunhoLogo(); }
+  };
+  gasFolder('_videos em envio', DRIVE_ROOT_ID)
+    .then(function(fid) { return gasCall({action: 'uploadStart', folderId: fid, fileName: lv.nome, mimeType: mime}); })
+    .then(function(st) {
+      lv.url = (st.result && st.result.uploadUrl) || null;
+      if (lv.item && lv.url) { lv.item.upUrl = lv.url; lv.item.temp = true; salvarRascunhoLogo(); }
+      enviar();
+    })
+    .catch(function(e) { console.warn('[vídeo ao vivo] não iniciou — envia tudo ao salvar', e); lv.parado = true; });
+  return lv;
+}
+
 // ── v3.3: Rascunho automático — atualizar/fechar a página não perde a entrada ──
 // Campos ficam no localStorage; fotos e vídeos no IndexedDB do próprio celular. Apaga sozinho depois de salvar no Drive.
 var RASC_KEY = 'rascunhoRecebimento', rascRestaurando = false, rascTimer = null;
@@ -2069,7 +2118,7 @@ function salvarRascunhoAgora() {
     });
     var meta = function(t) { return state[t].map(function(it) {
       return { k: it.dbKey, name: it.name, compKB: it.compKB, origKB: it.origKB, sizeKB: it.sizeKB,
-               enviado: !!it.enviado, upUrl: it.upUrl || '', upNext: it.upNext || 0 };
+               enviado: !!it.enviado, upUrl: it.upUrl || '', upNext: it.upNext || 0, temp: !!it.temp };
     }); };
     localStorage.setItem(RASC_KEY, JSON.stringify({
       t: Date.now(), campos: campos, equipCount: equipCount, acessCount: acessCount, chave: CHAVE_QR,
@@ -2151,7 +2200,7 @@ function restaurarRascunho() {
     ['fotos', 'videos'].forEach(function(type) {
       (r[type] || []).forEach(function(m) {
         var reg = m.k && todos[m.k]; if (!reg) return;
-        var it = { name: m.name, dbKey: m.k, enviado: m.enviado, upUrl: m.upUrl, upNext: m.upNext };
+        var it = { name: m.name, dbKey: m.k, enviado: m.enviado, upUrl: m.upUrl, upNext: m.upNext, temp: m.temp };
         if (type === 'fotos') { it.dataUrl = reg.dado; it.compKB = m.compKB; it.origKB = m.origKB; }
         else { it.url = URL.createObjectURL(reg.dado); it.sizeKB = m.sizeKB; }
         state[type].push(it);
