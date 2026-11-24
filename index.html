@@ -499,6 +499,7 @@ body {
 <div id="tab-videos" class="tab-panel active">
   <div class="media-section">
     <div class="media-section-title">REGISTRAR VÍDEOS</div>
+    <div style="background:#fff8e1;border-left:4px solid #f9a825;border-radius:6px;padding:10px 12px;margin:8px 0 12px;font-size:13px;line-height:1.45;color:#333;"><b>📋 Antes de gravar</b><br>• Comece com a caixa <b>ainda fechada</b>: mostre a etiqueta de envio e o estado da embalagem.<br>• <b>Não pare a gravação</b>: abra e mostre cada equipamento (com o nº de série) e cada acessório, até terminar.<br>• <b>Um vídeo por volume</b> (caixa). Pode ser longo: ele vai subindo para o Drive enquanto grava.<br>• Deixe o app aberto até o fim.</div>
     <div class="media-btns">
       <button class="btn-camera" onclick="openCamera('videos')">🎥 Câmera</button>
       <label class="btn-gallery" for="inp-vid-gal">🗂️ Galeria</label>
@@ -508,7 +509,6 @@ body {
            onchange="addMedia(this,'videos',false)">
     <div class="media-counter" id="cnt-videos">0 vídeos adicionados</div>
     <div id="grid-videos" class="media-grid"></div>
-    <div class="media-hint">⚠️ Vídeos grandes podem demorar. Recomendado: máx. 50 MB por arquivo.</div>
   </div>
 </div>
 
@@ -516,6 +516,7 @@ body {
 <div id="tab-fotos" class="tab-panel">
   <div class="media-section">
     <div class="media-section-title">REGISTRAR FOTOS</div>
+    <div style="background:#fff8e1;border-left:4px solid #f9a825;border-radius:6px;padding:10px 12px;margin:8px 0 12px;font-size:13px;line-height:1.45;color:#333;"><b>📋 Fotos — equipamento já aberto</b><br>• Equipamento inteiro (frente e traseira).<br>• Plaqueta com o <b>nº de série</b> legível.<br>• Acessórios recebidos.<br>• Qualquer avaria, de perto.<br>Com boa luz e sem tremer.</div>
     <div class="media-btns">
       <button class="btn-camera" onclick="openCamera('fotos')">📷 Câmera</button>
       <label class="btn-gallery" for="inp-foto-gal">🖼️ Galeria</label>
@@ -525,7 +526,6 @@ body {
            onchange="addMedia(this,'fotos',false)">
     <div class="media-counter" id="cnt-fotos">0 fotos adicionadas</div>
     <div id="grid-fotos" class="media-grid"></div>
-    <div class="media-hint">📌 Fotografe: embalagem, etiqueta do equipamento, número de série, condição geral.</div>
   </div>
 </div>
 
@@ -720,7 +720,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '3.5';
+var APP_VERSION = '3.6';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
