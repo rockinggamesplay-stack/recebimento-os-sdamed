@@ -732,7 +732,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '4.1';
+var APP_VERSION = '4.2';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -964,9 +964,31 @@ function renderGrid(type) {
   sincronizarMidia(type);
 }
 
+// v4.2: confirmação na própria tela antes de apagar (vídeo apagado não volta)
+function confirmarNaTela(msg, simTxt, onSim) {
+  var old = document.getElementById('confirma-tela'); if (old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'confirma-tela';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:18px;font:15px Arial,sans-serif;color:#222">' +
+    '<div id="ct-msg" style="margin-bottom:16px;line-height:1.4"></div>' +
+    '<div style="display:flex;gap:10px"><button id="ct-nao" style="flex:1;padding:12px;border:1.5px solid #bbb;background:#fff;border-radius:8px;font-weight:700">Cancelar</button>' +
+    '<button id="ct-sim" style="flex:1;padding:12px;border:0;background:#c62828;color:#fff;border-radius:8px;font-weight:700"></button></div></div>';
+  ov.querySelector('#ct-msg').textContent = msg;
+  ov.querySelector('#ct-sim').textContent = simTxt;
+  document.body.appendChild(ov);
+  ov.querySelector('#ct-nao').onclick = function() { ov.remove(); };
+  ov.querySelector('#ct-sim').onclick = function() { ov.remove(); onSim(); };
+}
 function removeMedia(type, idx) {
-  state[type].splice(idx, 1);
-  renderGrid(type);
+  var it = state[type][idx]; if (!it) return;
+  var msg = type === 'videos'
+    ? 'Apagar este vídeo?' + (it.enviado ? '' : ' Ele ainda não foi salvo no Drive e não poderá ser recuperado.')
+    : 'Apagar esta foto?';
+  confirmarNaTela(msg, 'Apagar', function() {
+    state[type].splice(idx, 1);
+    renderGrid(type);
+  });
 }
 
 // ── Label & QR ─────────────────────────────────────────────────────────────
@@ -1466,7 +1488,7 @@ function toggleRecording() {
     var liveUp = null;
     try { liveUp = iniciarEnvioAoVivo(mediaRecorder); } catch (eLv) { liveUp = null; }
     mediaRecorder.ondataavailable = function(e) {
-      if (e.data && e.data.size > 0) { recordedChunks.push(e.data); if (liveUp) liveUp.alimentar(e.data); }
+      if (e.data && e.data.size > 0) { recordedChunks.push(e.data); if (liveUp) liveUp.alimentar(e.data); guardarParteGravacao(e.data); }
     };
 
     mediaRecorder.onstop = function() {
@@ -1491,6 +1513,7 @@ function toggleRecording() {
       recordedChunks = [];
     };
 
+    iniciarGravacaoLocal(mediaRecorder.mimeType || mimeType || 'video/webm');
     mediaRecorder.start(3000); // partes a cada 3 s: vão subindo enquanto grava
     btn.textContent = '⏹';
     btn.classList.add('recording');
@@ -1520,6 +1543,7 @@ function confirmMedia() {
   } else {
     var vItem = { url: pendingCapture.url, name: pendingCapture.name, sizeKB: pendingCapture.sizeKB };
     if (pendingCapture.live) { vItem.live = pendingCapture.live; pendingCapture.live.ligarItem(vItem); }
+    setTimeout(limparGravacao, 15000); // o vídeo completo já terá sido guardado no rascunho
     state.videos.push(vItem);
     renderGrid('videos');
     if (camStream) { camStream.getTracks().forEach(function(t){ t.stop(); }); camStream = null; }
@@ -1531,7 +1555,12 @@ function confirmMedia() {
   pendingCapture = null;
 }
 
-function discardMedia() {
+function discardMedia(confirmado) {
+  if (!confirmado && pendingCapture && pendingCapture.type === 'videos') {
+    confirmarNaTela('Descartar este vídeo? A gravação será apagada e não poderá ser recuperada.', 'Descartar', function() { discardMedia(true); });
+    return;
+  }
+  if (pendingCapture && pendingCapture.type === 'videos') limparGravacao();
   pendingCapture = null;
   var pov = document.getElementById('media-prev-overlay');
   pov.classList.remove('show');
@@ -1994,6 +2023,11 @@ async function doSaveToDrive(btnId, noteId) {
         var vRes = await enviarVideo(vNome, vBlob, vMime, recId, (function(idx, mb){
           return function(p){ note.textContent='Enviando vídeo '+(idx+1)+' de '+state.videos.length+' ('+mb+' MB) — '+Math.round(p*100)+'%'; };
         })(i, vMB), vi);
+        if (vRes && typeof vRes.size === 'number' && vRes.size > 0 && vRes.size !== vBlob.size) {
+          // v4.2: o Drive recebeu tamanho diferente do celular → recomeça o envio do zero na próxima tentativa
+          vi.upUrl = ''; vi.upNext = 0; vi.temp = false; salvarRascunhoLogo();
+          throw new Error('tamanho no Drive (' + vRes.size + ') diferente do celular (' + vBlob.size + ')');
+        }
         if (vi.temp && vRes && vRes.fileId) {
           note.textContent='Colocando o vídeo '+(i+1)+' na pasta da OS...';
           await gasCall({action: 'moveFile', fileId: vRes.fileId, folderId: recId, name: vNome});
@@ -2034,6 +2068,11 @@ async function doSaveToDrive(btnId, noteId) {
         await gasUploadB64('registro_'+registro.id+'_OS-'+osNum+'.json',fichaB64,'application/json',recId);
         sv.ficha = true;
       } catch(fe) { console.warn('[ficha] não salva:', fe); }
+    }
+    if (!sv.ficha && !falhasVideo.length) {
+      btn.textContent='⚠️ Ficha pendente — tocar para tentar de novo'; btn.style.background='#e65100'; btn.disabled=false;
+      note.textContent='Fotos e vídeos salvos em '+monthName+'/'+osFolderName+', mas a ficha de dados (planilha) não subiu. Toque no botão acima para tentar de novo (não duplica nada).';
+      return;
     }
     if (falhasVideo.length) {
       btn.textContent='⚠️ Vídeo pendente — tocar para tentar de novo'; btn.style.background='#e65100'; btn.disabled=false;
@@ -2088,6 +2127,7 @@ function iniciarEnvioAoVivo(rec) {
         lv.sent = (r.result && typeof r.result.next === 'number') ? r.result.next : start + UPLOAD_CHUNK;
         if (lv.sent !== start + UPLOAD_CHUNK) lv.parado = true; // o resto é acertado ao salvar
         if (lv.item) { lv.item.upNext = lv.sent; salvarRascunhoLogo(); }
+        gravMetaSet({ sent: lv.sent });
       })
       .catch(function(e) { console.warn('[vídeo ao vivo] parte não subiu — termina ao salvar', e); lv.parado = true; })
       .then(function() { lv.sending = null; enviar(); });
@@ -2102,6 +2142,7 @@ function iniciarEnvioAoVivo(rec) {
     .then(function(fid) { return gasCall({action: 'uploadStart', folderId: fid, fileName: lv.nome, mimeType: mime}); })
     .then(function(st) {
       lv.url = (st.result && st.result.uploadUrl) || null;
+      gravMetaSet({ upUrl: lv.url || '' });
       if (lv.item && lv.url) { lv.item.upUrl = lv.url; lv.item.temp = true; salvarRascunhoLogo(); }
       enviar();
     })
@@ -2114,16 +2155,21 @@ function iniciarEnvioAoVivo(rec) {
 var RASC_KEY = 'rascunhoRecebimento', rascRestaurando = false, rascTimer = null;
 function rascDb() {
   return new Promise(function(res, rej) {
-    var rq = indexedDB.open('recebimentoRascunho', 1);
-    rq.onupgradeneeded = function() { rq.result.createObjectStore('midia', { autoIncrement: true }); };
+    var rq = indexedDB.open('recebimentoRascunho', 2);
+    rq.onupgradeneeded = function() {
+      var db = rq.result;
+      if (!db.objectStoreNames.contains('midia')) db.createObjectStore('midia', { autoIncrement: true });
+      if (!db.objectStoreNames.contains('gravacao')) db.createObjectStore('gravacao', { autoIncrement: true });
+    };
     rq.onsuccess = function() { res(rq.result); };
     rq.onerror = function() { rej(rq.error); };
   });
 }
-function rascIdb(modo, fn) {
+function rascIdb(modo, fn, loja) {
+  loja = loja || 'midia';
   return rascDb().then(function(db) {
     return new Promise(function(res, rej) {
-      var tx = db.transaction('midia', modo), st = tx.objectStore('midia'), out = fn(st);
+      var tx = db.transaction(loja, modo), st = tx.objectStore(loja), out = fn(st);
       tx.oncomplete = function() { res(out && out.result !== undefined ? out.result : undefined); };
       tx.onerror = function() { rej(tx.error); };
       tx.onabort = function() { rej(tx.error); };
@@ -2164,7 +2210,7 @@ function sincronizarMidia(type) {
       return (type === 'fotos' ? Promise.resolve(it.dataUrl) : fetch(it.url).then(function(r) { return r.blob(); }))
         .then(function(dado) { return rascIdb('readwrite', function(st) { return st.add({ type: type, dado: dado }); }); })
         .then(function(k) { it.dbKey = k; })
-        .catch(function(e) { console.warn('[rascunho] mídia não guardada', e); })
+        .catch(function(e) { console.warn('[rascunho] mídia não guardada', e); avisoCopiaLocal(); })
         .then(function() { it.dbSalvando = false; });
     });
   });
@@ -2274,6 +2320,71 @@ function resetForm() {
   switchTab('videos');
 }
 
+// ── v4.2: segurança da gravação ──
+var GRAV_KEY = 'gravacaoEmAndamento';
+function gravMetaSet(o) {
+  try { var m = JSON.parse(localStorage.getItem(GRAV_KEY) || 'null'); if (!m) return; Object.keys(o).forEach(function(k) { m[k] = o[k]; }); localStorage.setItem(GRAV_KEY, JSON.stringify(m)); } catch (_) {}
+}
+function iniciarGravacaoLocal(mime) {
+  try { localStorage.setItem(GRAV_KEY, JSON.stringify({ t: Date.now(), mime: String(mime).split(';')[0], upUrl: '', sent: 0 })); } catch (_) {}
+  if (!window.indexedDB) return;
+  rascIdb('readwrite', function(st) { st.clear(); }, 'gravacao').catch(function() {});
+}
+function guardarParteGravacao(blob) {
+  if (!window.indexedDB) return;
+  rascIdb('readwrite', function(st) { return st.add(blob); }, 'gravacao').catch(function(e) { console.warn('[gravação] parte não guardada', e); avisoCopiaLocal(); });
+}
+function limparGravacao() {
+  try { localStorage.removeItem(GRAV_KEY); } catch (_) {}
+  if (window.indexedDB) rascIdb('readwrite', function(st) { st.clear(); }, 'gravacao').catch(function() {});
+}
+function recuperarGravacao() {
+  var m = null; try { m = JSON.parse(localStorage.getItem(GRAV_KEY) || 'null'); } catch (_) {}
+  if (!m || !window.indexedDB) return;
+  rascDb().then(function(db) {
+    return new Promise(function(res) {
+      var partes = [], cur = db.transaction('gravacao', 'readonly').objectStore('gravacao').openCursor();
+      cur.onsuccess = function() { var c = cur.result; if (c) { partes.push(c.value); c.continue(); } else res(partes); };
+      cur.onerror = function() { res(partes); };
+    });
+  }).then(function(partes) {
+    if (!partes.length) { limparGravacao(); return; }
+    var blob = new Blob(partes, { type: m.mime || 'video/webm' });
+    var mb = (blob.size / 1048576).toFixed(1);
+    var av = document.createElement('div');
+    av.id = 'aviso-gravacao';
+    av.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:9999;background:#e65100;color:#fff;padding:12px;border-radius:8px;font:14px Arial,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    av.innerHTML = '<div style="margin-bottom:8px"><b>Encontramos uma gravação interrompida</b> (' + mb + ' MB, iniciada às ' +
+      new Date(m.t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) + '). Recuperar o vídeo?</div>' +
+      '<div style="display:flex;gap:8px"><button id="grav-sim" style="flex:1;padding:10px;border:0;border-radius:6px;font-weight:700;color:#e65100;background:#fff">Recuperar</button>' +
+      '<button id="grav-nao" style="flex:1;padding:10px;border:1px solid #fff;border-radius:6px;background:transparent;color:#fff">Descartar</button></div>';
+    document.body.appendChild(av);
+    document.getElementById('grav-sim').onclick = function() {
+      var n = new Date(m.t), p2 = function(x) { return String(x).padStart(2, '0'); };
+      var it = { url: URL.createObjectURL(blob), sizeKB: Math.round(blob.size / 1024),
+        name: 'video_recuperado_' + n.getFullYear() + p2(n.getMonth() + 1) + p2(n.getDate()) + '_' + p2(n.getHours()) + p2(n.getMinutes()) + ((m.mime || '').indexOf('mp4') >= 0 ? '.mp4' : '.webm') };
+      if (m.upUrl) { it.upUrl = m.upUrl; it.temp = true; it.upNext = m.sent || 0; }
+      state.videos.push(it);
+      renderGrid('videos'); switchTab('videos');
+      av.remove();
+      setTimeout(limparGravacao, 15000);
+    };
+    document.getElementById('grav-nao').onclick = function() {
+      confirmarNaTela('Descartar a gravação interrompida? Ela não poderá ser recuperada.', 'Descartar', function() { limparGravacao(); av.remove(); });
+    };
+  }).catch(function(e) { console.warn('[gravação] não recuperada', e); });
+}
+var avisoCopiaMostrado = false;
+function avisoCopiaLocal() {
+  if (avisoCopiaMostrado) return; avisoCopiaMostrado = true;
+  var av = document.createElement('div');
+  av.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:9998;background:#b71c1c;color:#fff;padding:10px 12px;border-radius:8px;font:13px Arial,sans-serif';
+  av.innerHTML = '⚠️ O celular não conseguiu guardar a cópia de segurança (pouco espaço). <b>Não atualize nem feche o app</b> até salvar no Drive. <u>OK</u>';
+  av.onclick = function() { av.remove(); };
+  document.body.appendChild(av);
+}
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function() {}); } catch (_) {}
+
 // ── Init ────────────────────────────────────────────────────────────────────
 (function init() {
   var today = new Date();
@@ -2285,6 +2396,7 @@ function resetForm() {
   loadFromURL();
   try { var rb = localStorage.getItem('recebedor'); if (rb) document.getElementById('f-recebedor').value = rb; } catch(_) {}
   try { restaurarRascunho(); } catch(e) { console.warn('[rascunho]', e); }
+  try { recuperarGravacao(); } catch(e) { console.warn('[gravação]', e); }
 })();
 
 
