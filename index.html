@@ -724,7 +724,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '3.9';
+var APP_VERSION = '4.0';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -985,8 +985,10 @@ function updateLabel() {
   var y = today.getFullYear();
   document.getElementById('lbl-date').textContent = 'Entrada: ' + d + '/' + m + '/' + y;
 
+  var lote   = document.getElementById('eq1-lote') ? document.getElementById('eq1-lote').value.trim() : '';
   var equipText = equip;
-  if (serie) equipText += ' · ' + serie;
+  if (serie) equipText += ' · SN ' + serie;
+  if (lote) equipText += ' · LOT ' + lote;
   document.getElementById('lbl-equip').textContent = equipText;
 
   updateQR(osNum, equip, serie);
@@ -1008,8 +1010,10 @@ function updateLabelTextOnly() {
   var y = today.getFullYear();
   document.getElementById('lbl-date').textContent = 'Entrada: ' + d + '/' + m + '/' + y;
 
+  var lote   = document.getElementById('eq1-lote') ? document.getElementById('eq1-lote').value.trim() : '';
   var equipText = equip;
-  if (serie) equipText += ' · ' + serie;
+  if (serie) equipText += ' · SN ' + serie;
+  if (lote) equipText += ' · LOT ' + lote;
   document.getElementById('lbl-equip').textContent = equipText;
   // Propositalmente NÃO chama updateQR() — o canvas do QR já foi renderizado
   // pelos handlers onChange e deve ser preservado intacto para a impressão.
@@ -2411,8 +2415,13 @@ function renderLabelCanvas(ctx, PW, PH) {
   var resGar = garTxt ? (R.contribuinte === 'Sim' ? 2 : 1) : 0;
   var resAc = acTxt ? 1 : 0;
   // Equipamento · série (negrito): até 2 linhas, sem roubar a linha de acessórios e de garantia
-  var livEq = Math.floor((yLimit - y - (resGar + resAc) * LH) / 21);
-  escrever(eqTxt, 'bold 18px ' + FONT, 21, Math.min(2, Math.max(1, livEq)));
+  // v4.0: nome do equipamento (até 2 linhas) e, abaixo, "SN ... · LOT ..." numa linha própria
+  var iId = eqTxt.search(/ · (SN|LOT) /);
+  var eqNome = iId >= 0 ? eqTxt.slice(0, iId) : eqTxt, eqId = iId >= 0 ? eqTxt.slice(iId + 3) : '';
+  var resId = eqId ? 1 : 0;
+  var livEq = Math.floor((yLimit - y - (resGar + resAc) * LH - resId * 18) / 21);
+  escrever(eqNome, 'bold 18px ' + FONT, 21, Math.min(2, Math.max(1, livEq)));
+  if (eqId) escrever(eqId, 'bold 15px ' + FONT, 18, 1);
   y += 2;
   // Abaixo do equipamento: fonte menor, em negrito (v3.9: fonte fina falhava na térmica)
   var livres = Math.max(0, Math.floor((yLimit - y) / LH));
