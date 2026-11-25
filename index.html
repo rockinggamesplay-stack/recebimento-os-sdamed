@@ -724,7 +724,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '3.8';
+var APP_VERSION = '3.9';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -2286,7 +2286,7 @@ function renderLabelCanvas(ctx, PW, PH) {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
 
-  var PAD = 12;
+  var PAD = 12, QX = 4; // v3.9: QR mais à esquerda
   var maxQR = Math.min(PH - 2 * PAD, PH > 260 ? 130 : 115);
   var qrSize = 0;
   var model = window._labelQR && window._labelQR._oQRCode;
@@ -2294,7 +2294,7 @@ function renderLabelCanvas(ctx, PW, PH) {
     var n = model.getModuleCount();
     var mod = Math.max(3, Math.floor(maxQR / n)); // mínimo 3 pontos por módulo = leitura confiável
     qrSize = n * mod;
-    var qx = PAD, qy = Math.round((PH - qrSize) / 2);
+    var qx = QX, qy = Math.round((PH - qrSize) / 2);
     for (var qr = 0; qr < n; qr++) {
       for (var qc = 0; qc < n; qc++) {
         if (model.isDark(qr, qc)) ctx.fillRect(qx + qc * mod, qy + qr * mod, mod, mod);
@@ -2305,33 +2305,37 @@ function renderLabelCanvas(ctx, PW, PH) {
     if (qrEl && (qrEl.tagName === 'CANVAS' || (qrEl.complete && qrEl.naturalWidth > 0))) {
       qrSize = maxQR;
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(qrEl, PAD, PAD, qrSize, qrSize);
+      ctx.drawImage(qrEl, QX, PAD, qrSize, qrSize);
       ctx.imageSmoothingEnabled = true;
     }
   }
 
-  var TX = qrSize ? PAD + qrSize + 12 : PAD;
+  var TX = qrSize ? QX + qrSize + 10 : PAD;
   var TW = PW - TX - PAD;
   var FONT = 'Arial, Helvetica, sans-serif';
 
-  // "OS"
+  // v3.9: "OS" + número na MESMA linha, número maior (até 80px)
   var y = PAD;
-  ctx.font = 'bold 16px ' + FONT;
-  ctx.fillText('OS', TX, y);
-  y += 19;
-
-  // Número da OS — maior fonte que couber na largura
   var osTxt = (osNum && osNum !== '——') ? osNum : '';
   if (osTxt) {
-    var fs = 56;
-    while (fs > 24) {
+    ctx.font = 'bold 22px ' + FONT;
+    var wOS = ctx.measureText('OS ').width;
+    var fs = 80;
+    while (fs > 28) {
       ctx.font = 'bold ' + fs + 'px ' + FONT;
-      if (ctx.measureText(osTxt).width <= TW) break;
+      if (ctx.measureText(osTxt).width <= TW - wOS) break;
       fs -= 2;
     }
-    ctx.fillText(osTxt, TX, y);
-    y += Math.round(fs * 0.9) + 5;
+    var base = y + Math.round(fs * 0.74);
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = 'bold 22px ' + FONT; ctx.fillText('OS', TX, base);
+    ctx.font = 'bold ' + fs + 'px ' + FONT; ctx.fillText(osTxt, TX + wOS, base);
+    ctx.textBaseline = 'top';
+    y = base + 6;
   } else {
+    ctx.font = 'bold 16px ' + FONT;
+    ctx.fillText('OS', TX, y);
+    y += 19;
     // Sem nº de OS: nome do cliente em até 2 linhas
     var nome = refSemOS() || '—';
     ctx.font = 'bold 22px ' + FONT;
@@ -2366,8 +2370,8 @@ function renderLabelCanvas(ctx, PW, PH) {
   var rodape = dtTxt + (R.recebidoPor ? ' · ' + R.recebidoPor : '');
 
   // Rodapé: data de entrada + quem recebeu
-  var dfs = 13;
-  do { ctx.font = dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW && --dfs > 10);
+  var dfs = 14;
+  do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW && --dfs > 10);
   ctx.textBaseline = 'bottom';
   ctx.fillText(rodape, TX, PH - PAD);
   ctx.textBaseline = 'top';
@@ -2403,17 +2407,17 @@ function renderLabelCanvas(ctx, PW, PH) {
     return ls.length;
   }
 
-  var LH = 16;
+  var LH = 17;
   var resGar = garTxt ? (R.contribuinte === 'Sim' ? 2 : 1) : 0;
   var resAc = acTxt ? 1 : 0;
   // Equipamento · série (negrito): até 2 linhas, sem roubar a linha de acessórios e de garantia
-  var livEq = Math.floor((yLimit - y - (resGar + resAc) * LH) / 18);
-  escrever(eqTxt, 'bold 15px ' + FONT, 18, Math.min(2, Math.max(1, livEq)));
+  var livEq = Math.floor((yLimit - y - (resGar + resAc) * LH) / 21);
+  escrever(eqTxt, 'bold 18px ' + FONT, 21, Math.min(2, Math.max(1, livEq)));
   y += 2;
-  // Abaixo do equipamento: fonte menor, sem negrito
+  // Abaixo do equipamento: fonte menor, em negrito (v3.9: fonte fina falhava na térmica)
   var livres = Math.max(0, Math.floor((yLimit - y) / LH));
-  livres -= escrever(acTxt ? 'Acess.: ' + acTxt : '', '13px ' + FONT, LH, livres - resGar);
-  escrever(garTxt, '13px ' + FONT, LH, Math.min(resGar, livres));
+  livres -= escrever(acTxt ? 'Acess.: ' + acTxt : '', 'bold 14px ' + FONT, LH, livres - resGar);
+  escrever(garTxt, 'bold 14px ' + FONT, LH, Math.min(resGar, livres));
 }
 
 function downloadLabelPng() {
