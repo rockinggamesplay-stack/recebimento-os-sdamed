@@ -694,6 +694,13 @@ body {
     <button class="btn-size" onclick="setLabelSize(40,this)">50 × 40 mm</button>
   </div>
 
+  <div class="section-title">NF DE ENTRADA</div>
+  <div class="field">
+    <label>Nº da NF de entrada no Bling (opcional)</label>
+    <input type="text" id="f-nfentrada" placeholder="Ex: 049471" inputmode="numeric" oninput="updateLabelTextOnly()">
+    <div style="font-size:12px;color:#777;margin-top:4px;">Se a NF já foi feita, digite o número antes de imprimir: ele sai em destaque na etiqueta e fica registrado na planilha.</div>
+  </div>
+
   <div class="section-title">PREVIEW DA ETIQUETA</div>
   <div class="label-preview-wrap">
     <div class="label-preview size-30" id="label-el">
@@ -701,6 +708,7 @@ body {
       <div class="label-left">
         <div class="label-os-num"><span class="l-os">OS </span><span id="lbl-os-num">——</span></div>
         <div class="label-date" id="lbl-date"></div>
+        <div class="label-date" id="lbl-nf" style="font-weight:700;color:#000;"></div>
         <div class="label-equip" id="lbl-equip"></div>
       </div>
     </div>
@@ -724,7 +732,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '4.0';
+var APP_VERSION = '4.1';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -984,6 +992,8 @@ function updateLabel() {
   var m = String(today.getMonth()+1).padStart(2,'0');
   var y = today.getFullYear();
   document.getElementById('lbl-date').textContent = 'Entrada: ' + d + '/' + m + '/' + y;
+  var nfE = document.getElementById('f-nfentrada') ? document.getElementById('f-nfentrada').value.trim() : '';
+  document.getElementById('lbl-nf').textContent = nfE ? 'NF ' + nfE : '';
 
   var lote   = document.getElementById('eq1-lote') ? document.getElementById('eq1-lote').value.trim() : '';
   var equipText = equip;
@@ -1009,6 +1019,8 @@ function updateLabelTextOnly() {
   var m = String(today.getMonth()+1).padStart(2,'0');
   var y = today.getFullYear();
   document.getElementById('lbl-date').textContent = 'Entrada: ' + d + '/' + m + '/' + y;
+  var nfE = document.getElementById('f-nfentrada') ? document.getElementById('f-nfentrada').value.trim() : '';
+  document.getElementById('lbl-nf').textContent = nfE ? 'NF ' + nfE : '';
 
   var lote   = document.getElementById('eq1-lote') ? document.getElementById('eq1-lote').value.trim() : '';
   var equipText = equip;
@@ -1787,6 +1799,7 @@ function coletarRegistro(now) {
     contribuinte: g('f-contribuinte'),
     chaveQR: CHAVE_QR,
     nfRemessa: g('f-contribuinte') === 'Sim' ? g('f-nfremessa') : '',
+    nfEntrada: g('f-nfentrada'),
     embalagem: g('f-embalagem'),
     conforme: g('f-conforme'),
     observacoes: g('f-obs'),
@@ -2242,7 +2255,7 @@ function resetForm() {
   renderGrid('videos');
   ['f-os','f-remetente','f-transportadora','eq1-modelo','eq1-serie','eq1-lote',
    'eq2-modelo','eq2-serie','eq2-lote','f-embalagem','f-conforme','f-obs',
-   'f-chegada','f-rastreio','f-nf','f-volumes','f-peso','f-garantia','f-contribuinte','f-nfremessa'].forEach(function(id){
+   'f-chegada','f-rastreio','f-nf','f-volumes','f-peso','f-garantia','f-contribuinte','f-nfremessa','f-nfentrada'].forEach(function(id){
     var el=document.getElementById(id); if(el){el.value='';}
   });
   var driveNote2 = document.getElementById('drive-note-2');
@@ -2374,10 +2387,16 @@ function renderLabelCanvas(ctx, PW, PH) {
   var rodape = dtTxt + (R.recebidoPor ? ' · ' + R.recebidoPor : '');
 
   // Rodapé: data de entrada + quem recebeu
+  // v4.1: nº da NF de entrada em destaque no rodapé, à direita
+  var nfTxt = R.nfEntrada ? 'NF ' + R.nfEntrada : '', wNf = 0;
+  if (nfTxt) { ctx.font = 'bold 18px ' + FONT; wNf = ctx.measureText(nfTxt).width + 8; }
+  if (nfTxt) rodape = rodape.replace(/^Entrada:\s*/, '');
   var dfs = 14;
-  do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW && --dfs > 10);
+  do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW - wNf && --dfs > 10);
+  while (rodape.length > 4 && ctx.measureText(rodape).width > TW - wNf) rodape = rodape.slice(0, -2) + '…';
   ctx.textBaseline = 'bottom';
   ctx.fillText(rodape, TX, PH - PAD);
+  if (nfTxt) { ctx.font = 'bold 18px ' + FONT; ctx.textAlign = 'right'; ctx.fillText(nfTxt, TX + TW, PH - PAD + 1); ctx.textAlign = 'left'; dfs = Math.max(dfs, 17); }
   ctx.textBaseline = 'top';
   var yLimit = PH - PAD - dfs - 3;
 
