@@ -732,7 +732,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '4.2';
+var APP_VERSION = '4.3';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -1883,6 +1883,37 @@ function copyResumoTxt() {
 }
 
 // ── Envio de arquivos grandes (vídeos) em partes de 8 MB — evita "Failed to fetch" ──
+// v4.3: gera um PDF de 1 página com o tamanho exato da etiqueta (imagem em tons de cinza, sem perdas)
+async function gerarPdfEtiqueta(canvas, mmW, mmH) {
+  var W = canvas.width, H = canvas.height, px = canvas.getContext('2d').getImageData(0, 0, W, H).data;
+  var raw = new Uint8Array(W * H);
+  for (var i = 0, j = 0; i < px.length; i += 4, j++) raw[j] = px[i];
+  var dados, filtro;
+  if (window.CompressionStream) {
+    var cs = new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'));
+    dados = new Uint8Array(await new Response(cs).arrayBuffer()); filtro = '/FlateDecode';
+  } else { dados = raw; filtro = ''; }
+  var ptW = (mmW * 72 / 25.4).toFixed(2), ptH = (mmH * 72 / 25.4).toFixed(2);
+  var enc = new TextEncoder(), partes = [], tam = 0, offs = [];
+  var add = function(x) { var b = typeof x === 'string' ? enc.encode(x) : x; partes.push(b); tam += b.length; };
+  var obj = function(n, corpo) { offs[n] = tam; add(n + ' 0 obj\n' + corpo + '\nendobj\n'); };
+  add('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + ptW + ' ' + ptH + '] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>');
+  offs[4] = tam;
+  add('4 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + W + ' /Height ' + H + ' /ColorSpace /DeviceGray /BitsPerComponent 8' +
+      (filtro ? ' /Filter ' + filtro : '') + ' /Length ' + dados.length + ' >>\nstream\n');
+  add(dados); add('\nendstream\nendobj\n');
+  var cont = 'q ' + ptW + ' 0 0 ' + ptH + ' 0 0 cm /Im0 Do Q';
+  obj(5, '<< /Length ' + cont.length + ' >>\nstream\n' + cont + '\nendstream');
+  var xref = tam, x = 'xref\n0 6\n0000000000 65535 f \n';
+  for (var n = 1; n <= 5; n++) x += String(offs[n]).padStart(10, '0') + ' 00000 n \n';
+  add(x + 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF');
+  var out = new Uint8Array(tam), p = 0;
+  partes.forEach(function(b) { out.set(b, p); p += b.length; });
+  return arrToB64(out);
+}
 var UPLOAD_CHUNK = 8 * 1024 * 1024; // múltiplo de 256 KB (exigência do Google Drive)
 async function blobToB64(blob) {
   return arrToB64(new Uint8Array(await blob.arrayBuffer()));
@@ -2057,6 +2088,11 @@ async function doSaveToDrive(btnId, noteId) {
         lCt.putImageData(lId,0,0);
         await gasUploadB64('etiqueta_OS-'+osNum+'_'+dateStr+'_'+timeStr+'.png',lCv.toDataURL('image/png').split(',')[1],'image/png',recId);
         sv.etiqueta = true;
+        // v4.3: PDF no tamanho exato da etiqueta (50×30 ou 50×40 mm), para reimprimir pelo Drive na NIIMBOT
+        try {
+          var lPdf = await gerarPdfEtiqueta(lCv, 50, labelSizeMm);
+          await gasUploadB64('imprimir_etiqueta_OS-'+osNum+'_50x'+labelSizeMm+'mm.pdf', lPdf, 'application/pdf', recId);
+        } catch(pe) { console.warn('[etiqueta pdf] não salvo:', pe); }
       } catch(le) { console.warn('[etiqueta] não salva:', le); }
     }
     // Ficha de dados (.json) para a planilha de controle — se falhar, não bloqueia
