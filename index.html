@@ -732,7 +732,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '4.4';
+var APP_VERSION = '4.5';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -2452,6 +2452,15 @@ function renderLabelCanvas(ctx, PW, PH) {
   ctx.textBaseline = 'top';
 
   var PAD = 12, QX = 4, qBottom = 0; // v3.9: QR mais à esquerda
+  // v4.5: dados lidos antes do QR; NF, data curta e quem recebeu ficam em cascata abaixo do QR
+  var R = {};
+  try { R = coletarRegistro(new Date()) || {}; } catch (_) { R = {}; }
+  var mDt = /(\d{2})\/(\d{2})\/\d{2}(\d{2})/.exec(dtTxt), dtCurto = mDt ? mDt[1] + '/' + mDt[2] + '/' + mDt[3] : '';
+  var colEsq = [];
+  if (R.nfEntrada) colEsq.push({ t: 'NF ' + R.nfEntrada, fs: 18 });
+  if (dtCurto) colEsq.push({ t: dtCurto, fs: 13 });
+  if (R.recebidoPor) colEsq.push({ t: R.recebidoPor, fs: 13 });
+  var colH = colEsq.reduce(function(a, c) { return a + c.fs + 3; }, 0) + (colEsq.length ? 4 : 0);
   var maxQR = Math.min(PH - 2 * PAD, PH > 260 ? 130 : 115);
   var qrSize = 0;
   var model = window._labelQR && window._labelQR._oQRCode;
@@ -2459,7 +2468,7 @@ function renderLabelCanvas(ctx, PW, PH) {
     var n = model.getModuleCount();
     var mod = Math.max(3, Math.floor(maxQR / n)); // mínimo 3 pontos por módulo = leitura confiável
     qrSize = n * mod;
-    var qx = QX, qy = Math.round((PH - qrSize) / 2); qBottom = qy + qrSize;
+    var qx = QX, qy = Math.max(4, Math.round((PH - qrSize - colH) / 2)); qBottom = qy + qrSize;
     for (var qr = 0; qr < n; qr++) {
       for (var qc = 0; qc < n; qc++) {
         if (model.isDark(qr, qc)) ctx.fillRect(qx + qc * mod, qy + qr * mod, mod, mod);
@@ -2523,8 +2532,6 @@ function renderLabelCanvas(ctx, PW, PH) {
   y += 7;
 
   // Dados da aba Dados
-  var R = {};
-  try { R = coletarRegistro(new Date()) || {}; } catch (_) { R = {}; }
   var acTxt = R.semAcessorios ? 'Sem acessórios'
     : ((R.acessorios && R.acessorios.length)
         ? R.acessorios.map(function(a) { return (a.qtd && a.qtd !== '1' ? a.qtd + '× ' : '') + a.nome; }).join('; ')
@@ -2532,30 +2539,24 @@ function renderLabelCanvas(ctx, PW, PH) {
   var garTxt = R.garantia || '';
   if (R.contribuinte === 'Sim') garTxt = (garTxt ? garTxt + ' · ' : '') + 'Contribuinte' +
     (R.nfRemessa === 'Não' ? ' · SEM NF' : R.nfRemessa === 'Sim' ? ' · NF ok' : '');
-  var rodape = dtTxt + (R.recebidoPor ? ' · ' + R.recebidoPor : '');
-
-  // Rodapé: data de entrada + quem recebeu
-  // v4.1: nº da NF de entrada em destaque no rodapé, à direita
-  // v4.4: NF logo abaixo do QR Code (lado esquerdo); só vai para o rodapé se não houver QR
-  var nfTxt = R.nfEntrada ? 'NF ' + R.nfEntrada : '', wNf = 0, nfNoQR = !!(nfTxt && qrSize);
-  if (nfNoQR) {
-    var nfMax = TX - QX - 6, nfFs = 20;
-    do { ctx.font = 'bold ' + nfFs + 'px ' + FONT; } while (ctx.measureText(nfTxt).width > nfMax && --nfFs > 11);
+  var yLimit = PH - PAD;
+  if (qrSize) {
+    // v4.5: NF, data e quem recebeu em cascata abaixo do QR (libera a coluna da direita para os equipamentos)
+    var cx = QX + qrSize / 2, cMax = TX - QX - 6, cy = qBottom + 4;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(nfTxt, QX + qrSize / 2, Math.min(qBottom + 5, PH - PAD - nfFs));
+    colEsq.forEach(function(c) {
+      var fs = c.fs, t = c.t;
+      do { ctx.font = 'bold ' + fs + 'px ' + FONT; } while (ctx.measureText(t).width > cMax && --fs > 9);
+      while (t.length > 2 && ctx.measureText(t).width > cMax) t = t.slice(0, -2) + '…';
+      ctx.fillText(t, cx, cy); cy += c.fs + 3;
+    });
     ctx.textAlign = 'left';
-    nfTxt = '';
+  } else {
+    var rodape = colEsq.map(function(c) { return c.t; }).join(' · '), dfs = 13;
+    do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW && --dfs > 9);
+    ctx.textBaseline = 'bottom'; ctx.fillText(rodape, TX, PH - PAD); ctx.textBaseline = 'top';
+    yLimit = PH - PAD - dfs - 3;
   }
-  if (nfTxt) { ctx.font = 'bold 18px ' + FONT; wNf = ctx.measureText(nfTxt).width + 8; }
-  if (nfTxt) rodape = rodape.replace(/^Entrada:\s*/, '');
-  var dfs = 14;
-  do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW - wNf && --dfs > 10);
-  while (rodape.length > 4 && ctx.measureText(rodape).width > TW - wNf) rodape = rodape.slice(0, -2) + '…';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(rodape, TX, PH - PAD);
-  if (nfTxt) { ctx.font = 'bold 18px ' + FONT; ctx.textAlign = 'right'; ctx.fillText(nfTxt, TX + TW, PH - PAD + 1); ctx.textAlign = 'left'; dfs = Math.max(dfs, 17); }
-  ctx.textBaseline = 'top';
-  var yLimit = PH - PAD - dfs - 3;
 
   function quebrar(txt) {
     var out = [], cur = '';
@@ -2590,14 +2591,30 @@ function renderLabelCanvas(ctx, PW, PH) {
   var LH = 17;
   var resGar = garTxt ? (R.contribuinte === 'Sim' ? 2 : 1) : 0;
   var resAc = acTxt ? 1 : 0;
-  // Equipamento · série (negrito): até 2 linhas, sem roubar a linha de acessórios e de garantia
-  // v4.0: nome do equipamento (até 2 linhas) e, abaixo, "SN ... · LOT ..." numa linha própria
-  var iId = eqTxt.search(/ · (SN|LOT) /);
-  var eqNome = iId >= 0 ? eqTxt.slice(0, iId) : eqTxt, eqId = iId >= 0 ? eqTxt.slice(iId + 3) : '';
-  var resId = eqId ? 1 : 0;
-  var livEq = Math.floor((yLimit - y - (resGar + resAc) * LH - resId * 18) / 21);
-  escrever(eqNome, 'bold 18px ' + FONT, 21, Math.min(2, Math.max(1, livEq)));
-  if (eqId) escrever(eqId, 'bold 15px ' + FONT, 18, 1);
+  var eqs = (R.equipamentos || []).filter(function(e) { return e.modelo || e.serie || e.lote; });
+  var idTxt = function(e) { return [e.serie ? 'SN ' + e.serie : '', e.lote ? 'LOT ' + e.lote : ''].filter(String).join(' · '); };
+  if (eqs.length <= 1) {
+    // um equipamento: nome (até 2 linhas) e, abaixo, "SN ... · LOT ..."
+    var iId = eqTxt.search(/ · (SN|LOT) /);
+    var eqNome = iId >= 0 ? eqTxt.slice(0, iId) : eqTxt, eqId = iId >= 0 ? eqTxt.slice(iId + 3) : '';
+    var resId = eqId ? 1 : 0;
+    var livEq = Math.floor((yLimit - y - (resGar + resAc) * LH - resId * 18) / 21);
+    escrever(eqNome, 'bold 18px ' + FONT, 21, Math.min(2, Math.max(1, livEq)));
+    if (eqId) escrever(eqId, 'bold 15px ' + FONT, 18, 1);
+  } else {
+    // v4.5: vários equipamentos — prioridade para nº de série e lote de cada um (fonte menor)
+    var mesmo = eqs.every(function(e) { return (e.modelo || '') === (eqs[0].modelo || ''); });
+    var LHe = 15, fE = 'bold 13px ' + FONT;
+    if (mesmo && eqs[0].modelo) escrever(eqs.length + '× ' + eqs[0].modelo, 'bold 16px ' + FONT, 19, 1);
+    var cabe = Math.floor((yLimit - y - resGar * LH) / LHe);
+    var linhas = eqs.map(function(e, k) {
+      return (k + 1) + ') ' + (mesmo ? (idTxt(e) || e.modelo) : [idTxt(e), e.modelo].filter(String).join(' · '));
+    });
+    if (linhas.length > cabe) { linhas = linhas.slice(0, Math.max(0, cabe - 1)); linhas.push('+ ' + (eqs.length - linhas.length) + ' equipamento(s) – ver relatório'); }
+    var maxLe = (!mesmo && cabe >= linhas.length * 2) ? 2 : 1; // sobrando espaço, o modelo pode ir para a 2ª linha
+    linhas.forEach(function(l) { escrever(l, fE, LHe, maxLe); });
+    resAc = 0; acTxt = ((yLimit - y) / LH) >= resGar + 1 ? acTxt : ''; // acessórios só se sobrar espaço
+  }
   y += 2;
   // Abaixo do equipamento: fonte menor, em negrito (v3.9: fonte fina falhava na térmica)
   var livres = Math.max(0, Math.floor((yLimit - y) / LH));
