@@ -732,7 +732,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '4.3';
+var APP_VERSION = '4.4';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -2451,7 +2451,7 @@ function renderLabelCanvas(ctx, PW, PH) {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
 
-  var PAD = 12, QX = 4; // v3.9: QR mais à esquerda
+  var PAD = 12, QX = 4, qBottom = 0; // v3.9: QR mais à esquerda
   var maxQR = Math.min(PH - 2 * PAD, PH > 260 ? 130 : 115);
   var qrSize = 0;
   var model = window._labelQR && window._labelQR._oQRCode;
@@ -2459,7 +2459,7 @@ function renderLabelCanvas(ctx, PW, PH) {
     var n = model.getModuleCount();
     var mod = Math.max(3, Math.floor(maxQR / n)); // mínimo 3 pontos por módulo = leitura confiável
     qrSize = n * mod;
-    var qx = QX, qy = Math.round((PH - qrSize) / 2);
+    var qx = QX, qy = Math.round((PH - qrSize) / 2); qBottom = qy + qrSize;
     for (var qr = 0; qr < n; qr++) {
       for (var qc = 0; qc < n; qc++) {
         if (model.isDark(qr, qc)) ctx.fillRect(qx + qc * mod, qy + qr * mod, mod, mod);
@@ -2470,13 +2470,13 @@ function renderLabelCanvas(ctx, PW, PH) {
     if (qrEl && (qrEl.tagName === 'CANVAS' || (qrEl.complete && qrEl.naturalWidth > 0))) {
       qrSize = maxQR;
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(qrEl, QX, PAD, qrSize, qrSize);
+      ctx.drawImage(qrEl, QX, PAD, qrSize, qrSize); qBottom = PAD + qrSize;
       ctx.imageSmoothingEnabled = true;
     }
   }
 
   var TX = qrSize ? QX + qrSize + 10 : PAD;
-  var TW = PW - TX - PAD;
+  var TW = PW - TX - PAD - 6; // v4.4: folga extra à direita (a impressão corta um pouco)
   var FONT = 'Arial, Helvetica, sans-serif';
 
   // v3.9: "OS" + número na MESMA linha, número maior (até 80px)
@@ -2536,7 +2536,16 @@ function renderLabelCanvas(ctx, PW, PH) {
 
   // Rodapé: data de entrada + quem recebeu
   // v4.1: nº da NF de entrada em destaque no rodapé, à direita
-  var nfTxt = R.nfEntrada ? 'NF ' + R.nfEntrada : '', wNf = 0;
+  // v4.4: NF logo abaixo do QR Code (lado esquerdo); só vai para o rodapé se não houver QR
+  var nfTxt = R.nfEntrada ? 'NF ' + R.nfEntrada : '', wNf = 0, nfNoQR = !!(nfTxt && qrSize);
+  if (nfNoQR) {
+    var nfMax = TX - QX - 6, nfFs = 20;
+    do { ctx.font = 'bold ' + nfFs + 'px ' + FONT; } while (ctx.measureText(nfTxt).width > nfMax && --nfFs > 11);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(nfTxt, QX + qrSize / 2, Math.min(qBottom + 5, PH - PAD - nfFs));
+    ctx.textAlign = 'left';
+    nfTxt = '';
+  }
   if (nfTxt) { ctx.font = 'bold 18px ' + FONT; wNf = ctx.measureText(nfTxt).width + 8; }
   if (nfTxt) rodape = rodape.replace(/^Entrada:\s*/, '');
   var dfs = 14;
