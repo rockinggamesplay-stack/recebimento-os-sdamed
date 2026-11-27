@@ -732,7 +732,7 @@ body {
 
 <script>
 // ── Versão do app: se o celular abrir uma versão antiga do cache, recarrega sozinho ──
-var APP_VERSION = '4.5';
+var APP_VERSION = '4.6';
 (function checkAppVersion() {
   var ve = document.getElementById('app-ver');
   if (ve) ve.textContent = 'versão ' + APP_VERSION;
@@ -2458,9 +2458,9 @@ function renderLabelCanvas(ctx, PW, PH) {
   var mDt = /(\d{2})\/(\d{2})\/\d{2}(\d{2})/.exec(dtTxt), dtCurto = mDt ? mDt[1] + '/' + mDt[2] + '/' + mDt[3] : '';
   var colEsq = [];
   if (R.nfEntrada) colEsq.push({ t: 'NF ' + R.nfEntrada, fs: 18 });
-  if (dtCurto) colEsq.push({ t: dtCurto, fs: 13 });
   if (R.recebidoPor) colEsq.push({ t: R.recebidoPor, fs: 13 });
   var colH = colEsq.reduce(function(a, c) { return a + c.fs + 3; }, 0) + (colEsq.length ? 4 : 0);
+  var dtH = dtCurto ? 24 : 0; // v4.6: data de entrada grande, no canto inferior esquerdo
   var maxQR = Math.min(PH - 2 * PAD, PH > 260 ? 130 : 115);
   var qrSize = 0;
   var model = window._labelQR && window._labelQR._oQRCode;
@@ -2468,7 +2468,7 @@ function renderLabelCanvas(ctx, PW, PH) {
     var n = model.getModuleCount();
     var mod = Math.max(3, Math.floor(maxQR / n)); // mínimo 3 pontos por módulo = leitura confiável
     qrSize = n * mod;
-    var qx = QX, qy = Math.max(4, Math.round((PH - qrSize - colH) / 2)); qBottom = qy + qrSize;
+    var qx = QX, qy = Math.max(4, Math.round((PH - dtH - 4 - qrSize - colH) / 2)); qBottom = qy + qrSize;
     for (var qr = 0; qr < n; qr++) {
       for (var qc = 0; qc < n; qc++) {
         if (model.isDark(qr, qc)) ctx.fillRect(qx + qc * mod, qy + qr * mod, mod, mod);
@@ -2551,8 +2551,13 @@ function renderLabelCanvas(ctx, PW, PH) {
       ctx.fillText(t, cx, cy); cy += c.fs + 3;
     });
     ctx.textAlign = 'left';
+    if (dtCurto) { // v4.6: data em destaque no canto inferior esquerdo
+      var dfs2 = 22;
+      do { ctx.font = 'bold ' + dfs2 + 'px ' + FONT; } while (ctx.measureText(dtCurto).width > cMax + 4 && --dfs2 > 12);
+      ctx.textBaseline = 'bottom'; ctx.fillText(dtCurto, QX + 2, PH - 3); ctx.textBaseline = 'top';
+    }
   } else {
-    var rodape = colEsq.map(function(c) { return c.t; }).join(' · '), dfs = 13;
+    var rodape = [dtCurto].concat(colEsq.map(function(c) { return c.t; })).filter(String).join(' · '), dfs = 13;
     do { ctx.font = 'bold ' + dfs + 'px ' + FONT; } while (ctx.measureText(rodape).width > TW && --dfs > 9);
     ctx.textBaseline = 'bottom'; ctx.fillText(rodape, TX, PH - PAD); ctx.textBaseline = 'top';
     yLimit = PH - PAD - dfs - 3;
